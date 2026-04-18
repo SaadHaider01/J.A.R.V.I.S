@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger("JARVIS.FileManager")
 
 def delete_file(file_path: str) -> bool:
-    """
+    r"""
     Securely deletes a file using Python's modern 'pathlib'.
     
     Why pathlib? In the old days, people used 'os.remove()', but 'pathlib' treats 

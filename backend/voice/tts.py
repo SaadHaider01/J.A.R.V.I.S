@@ -2,8 +2,25 @@ import asyncio
 import edge_tts
 import os
 import tempfile
-import pygame
+import ctypes
 from config import TTS_VOICE
+
+def play_audio_windows(file_path):
+    """
+    Uses native Windows DLLs to play an MP3 silently.
+    This completely bypasses the need for bloated libraries like Pygame or PyAudio
+    which fail to install on bleeding-edge Python versions (like Python 3.14).
+    """
+    alias = "jarvis_audio"
+    
+    # 1. Open the MP3 file natively
+    ctypes.windll.winmm.mciSendStringW(f'open "{file_path}" alias {alias}', None, 0, None)
+    
+    # 2. Play it and wait for it to finish ('wait' ensures Python blocks until the speech stops)
+    ctypes.windll.winmm.mciSendStringW(f'play {alias} wait', None, 0, None)
+    
+    # 3. Close the stream so the file lock is released
+    ctypes.windll.winmm.mciSendStringW(f'close {alias}', None, 0, None)
 
 def speak(text: str, voice: str = TTS_VOICE):
     """
@@ -15,23 +32,19 @@ def speak(text: str, voice: str = TTS_VOICE):
         
         # Create a temporary file to save the audio
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-        temp_file.close() # Close so edge-tts can write to it
+        temp_file.close() # Close immediately so edge-tts can write to it
         
         # Synthesize and save the speech
         await communicate.save(temp_file.name)
         
-        # Initialize pygame mixer and play the audio seamlessly
-        pygame.mixer.init()
-        pygame.mixer.music.load(temp_file.name)
-        pygame.mixer.music.play()
+        # Play the audio using our native Windows bypass
+        play_audio_windows(temp_file.name)
         
-        # Wait until the audio finishes playing
-        while pygame.mixer.music.get_busy():
-            pygame.time.Clock().tick(10)
-            
-        # Clean up pygame mixer so we can delete the file from OS
-        pygame.mixer.quit()
-        os.remove(temp_file.name)
+        # Clean up the file from the OS
+        try:
+            os.remove(temp_file.name)
+        except Exception:
+            pass
         
     asyncio.run(_amain())
 

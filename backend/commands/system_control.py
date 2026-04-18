@@ -8,9 +8,9 @@ def shutdown_pc():
     """
     Shuts down the Windows PC
     """
-    logger.warning("Initiating system shutdown...")
+    logger.warning("Initiating system shutdown in 30 seconds...")
     if platform.system() == "Windows":
-        os.system("shutdown /s /t 1")
+        os.system("shutdown /s /t 30")
 
 def sleep_pc():
     """

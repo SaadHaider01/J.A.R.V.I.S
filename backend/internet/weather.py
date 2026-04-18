@@ -22,8 +22,8 @@ def get_current_weather(city: str) -> str:
     url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHERMAP_API_KEY}&units=metric"
     
     try:
-        # GET data from the URL
-        response = requests.get(url).json()
+        # GET data from the URL with a 10-second timeout
+        response = requests.get(url, timeout=10).json()
         
         # HTTP Code 200 means SUCCESS
         if response.get("cod") != 200:

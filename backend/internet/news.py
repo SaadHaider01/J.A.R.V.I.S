@@ -16,7 +16,8 @@ def get_latest_news() -> str:
     url = f"https://newsapi.org/v2/top-headlines?country=us&apiKey={NEWS_API_KEY}&pageSize=3"
     
     try:
-        response = requests.get(url).json()
+        # GET news data with a 10-second timeout
+        response = requests.get(url, timeout=10).json()
         
         if response.get("status") != "ok":
             return "Sorry, I couldn't fetch the news at this moment."

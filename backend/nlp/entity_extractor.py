@@ -28,7 +28,7 @@ class EntityExtractor:
             return {}
 
         doc = self.nlp(text)
-        entities = {}
+        entities: dict[str, list[str]] = {}
         for ent in doc.ents:
             if ent.label_ not in entities:
                 entities[ent.label_] = []

@@ -9,7 +9,6 @@ openai-whisper
 edge-tts
 sounddevice
 numpy
-pygame
 soundfile
 
 # LLM and Internet capabilities
