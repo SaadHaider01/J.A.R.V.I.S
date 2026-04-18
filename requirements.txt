@@ -10,6 +10,7 @@ edge-tts
 sounddevice
 numpy
 soundfile
+webrtcvad
 
 # LLM and Internet capabilities
 groq

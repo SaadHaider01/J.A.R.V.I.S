@@ -11,7 +11,7 @@ NEWS_API_KEY = config('NEWS_API_KEY', default='')
 GROQ_API_KEY = config('GROQ_API_KEY', default='')
 
 # AI Model Defaults
-WHISPER_MODEL_SIZE = "base.en" # Greatly increases transcription accuracy for English!
+WHISPER_MODEL_SIZE = "small.en" # Better accuracy than base.en, still fast enough for real-time use
 TTS_VOICE = "en-GB-RyanNeural" # Highly realistic British Male AI Voice
 
 # Agent Settings
