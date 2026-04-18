@@ -2,8 +2,9 @@ import argparse
 import sys
 import logging
 from config import DEBUG
+from backend.wake_word.listener import MicrophoneListener
 
-# Configure minimal logging
+# Configure root logger
 logging.basicConfig(
     level=logging.DEBUG if DEBUG else logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -11,28 +12,26 @@ logging.basicConfig(
 logger = logging.getLogger("JARVIS")
 
 def main():
-    parser = argparse.ArgumentParser(description="JARVIS Core System")
-    parser.add_argument('--debug', action='store_true', help="Enable debug mode manually")
-    args = parser.parse_args()
-
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
-
-    logger.info("Initializing JARVIS system...")
+    logger.info("Initializing JARVIS system cores...")
     
-    # TODO: Initialize Wake Word Detection, STT, and TTS engines
-    # TODO: Load Memory and Settings
-    # TODO: Start UI and Background Service Hooks
-    
-    logger.info("JARVIS is standing by. Press Ctrl+C to exit.")
+    # Load the unified listener wrapper (which internally loads STT, TTS, and Agent Brain)
+    try:
+        jarvis_ears = MicrophoneListener()
+    except Exception as e:
+        logger.error(f"Failed to boot JARVIS models: {e}")
+        sys.exit(1)
+        
+    logger.info("All systems nominal.")
     
     try:
-        # Placeholder for main event loop
-        while True:
-            pass
+        # Start the infinite Wake Word detection loop
+        jarvis_ears.listen_for_wake_word()
     except KeyboardInterrupt:
-        logger.info("Shutting down JARVIS...")
+        logger.info("Shutting down JARVIS explicitly...")
+        jarvis_ears.stop()
         sys.exit(0)
+    except Exception as e:
+        logger.error(f"Critical System Failure in runtime loop: {e}")
 
 if __name__ == "__main__":
     main()

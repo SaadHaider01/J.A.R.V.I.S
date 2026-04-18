@@ -12,6 +12,10 @@ numpy
 pygame
 soundfile
 
+# LLM and Internet capabilities
+groq
+duckduckgo-search
+
 # Machine Learning / NLP capabilities
 torch
 torchaudio

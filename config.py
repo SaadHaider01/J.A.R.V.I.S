@@ -8,10 +8,14 @@ BASE_DIR = Path(__file__).resolve().parent
 # API Keys loaded from .env
 OPENWEATHERMAP_API_KEY = config('OPENWEATHERMAP_API_KEY', default='')
 NEWS_API_KEY = config('NEWS_API_KEY', default='')
+GROQ_API_KEY = config('GROQ_API_KEY', default='')
 
 # AI Model Defaults
 WHISPER_MODEL_SIZE = "small" # options: tiny, base, small, medium, large
 TTS_VOICE = "en-US-AriaNeural" # edge-tts default female voice
+
+# Agent Settings
+LLM_MODEL = "llama3-70b-8192" # Fast Groq Model
 
 # Wake Word Settings
 WAKE_WORD_SENSITIVITY = 0.5 # 0.0 to 1.0
