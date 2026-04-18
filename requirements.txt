@@ -1,0 +1,24 @@
+# Core Setup
+python-decouple
+requests
+colorlog
+
+# Audio & Voice pipelines (Wake word, STT, TTS)
+openwakeword
+openai-whisper
+edge-tts
+sounddevice
+numpy
+pygame
+soundfile
+
+# Machine Learning / NLP capabilities
+torch
+torchaudio
+transformers
+spacy
+
+# Desktop Control & UI
+PyQt6
+PyAutoGUI
+
