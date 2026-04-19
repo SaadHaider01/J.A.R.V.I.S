@@ -1,20 +1,33 @@
 import json
 import logging
-import os
 import time
+import subprocess
 import pyautogui
 from groq import Groq
 from duckduckgo_search import DDGS
 from config import GROQ_API_KEY, LLM_MODEL
 from backend.memory.context_manager import ConversationalMemory
-from backend.commands.app_launcher import launch_app, app_paths, search_in_browser
+from backend.commands.app_launcher import launch_app
 from backend.commands.system_control import sleep_pc, shutdown_pc
+from backend.commands.camera import take_selfie, record_video
+from backend.commands.clock import set_timer
+from backend.commands.cancel_handler import trigger_cancellation
+from backend.commands.browser import (
+    open_browser, search_web, search_youtube, click_element,
+    fill_form, scroll_page, switch_browser
+)
+from backend.commands.screen_pilot import find_and_click, find_and_type
+from backend.commands.window_manager import (
+    focus_window, minimize_window, close_window,
+    switch_window, list_open_windows
+)
 
 logger = logging.getLogger("JARVIS.Agent")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TOOL DEFINITIONS
 # ─────────────────────────────────────────────────────────────────────────────
+
 TOOLS = [
     {
         "type": "function",
@@ -97,8 +110,9 @@ TOOLS = [
             "name": "shutdown_computer",
             "description": (
                 "Performs a FULL SYSTEM SHUTDOWN of the Windows PC. "
-                "ONLY call this when the user explicitly uses the words 'shut down the computer' or 'turn off the pc'. "
-                "Do NOT call this for 'terminate', 'close', 'kill', 'stop', or 'exit' — those are process commands, not system commands. "
+                "ONLY call this when the user explicitly uses the words 'shut down the computer' "
+                "or 'turn off the pc'. "
+                "Do NOT call this for 'terminate', 'close', 'kill', 'stop', or 'exit'. "
                 "NEVER trigger this automatically."
             ),
             "parameters": {"type": "object", "properties": {}},
@@ -110,8 +124,8 @@ TOOLS = [
             "name": "terminate_process",
             "description": (
                 "Closes or kills a running application or terminal window on the user's PC. "
-                "Use this when the user says 'terminate', 'close', 'kill', 'stop', or 'exit' a specific app or terminal. "
-                "This does NOT shut down the computer."
+                "Use this when the user says 'terminate', 'close', 'kill', 'stop', or 'exit' "
+                "a specific app or terminal. This does NOT shut down the computer."
             ),
             "parameters": {
                 "type": "object",
@@ -119,8 +133,9 @@ TOOLS = [
                     "process_name": {
                         "type": "string",
                         "description": (
-                            "The name of the process or window to close. Examples: 'cmd', 'notepad', 'brave', "
-                            "'terminal', 'powershell'. Use the closest Windows executable name."
+                            "The name of the process or window to close. Examples: 'cmd', "
+                            "'notepad', 'brave', 'terminal', 'powershell'. "
+                            "Use the closest Windows executable name."
                         ),
                     }
                 },
@@ -131,21 +146,279 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "search_in_browser",
+            "name": "take_selfie",
             "description": (
-                "Opens the Brave browser and performs a Google search for the given query. "
-                "Use this when the user says 'search for X', 'look up X in browser', 'Google X', "
-                "or 'open Brave and search for X'. This visually opens Brave with search results."
+                "Opens the user's laptop camera and physically takes a picture (selfie). "
+                "Use this whenever the user asks you to take a photo, take a picture, or take a selfie."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "record_video",
+            "description": (
+                "Opens the laptop camera and records a video for a specified number of seconds. "
+                "Use this when the user asks you to record a video, take a video, or film something."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search term or phrase to search for on Google.",
+                    "duration_seconds": {
+                        "type": "integer",
+                        "description": "How many seconds to record for. Default to 10 if unspecified.",
                     }
                 },
+                "required": ["duration_seconds"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cancel_action",
+            "description": (
+                "Instantly interrupts and stops any currently executing physical macro. "
+                "Use this specifically when the user says 'stop', 'cancel', 'wait', or 'abort'."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_browser_url",
+            "description": "Launches the browser and navigates to a specific URL.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The full URL to visit.",
+                    },
+                    "browser_name": {
+                        "type": "string",
+                        "description": "brave, chrome, edge, or firefox. Defaults to brave.",
+                    },
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_google",
+            "description": "Opens the browser and performs a Google search for the query.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
                 "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_youtube",
+            "description": "Opens YouTube and searches for a video.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_click_element",
+            "description": (
+                "Clicks an HTML element (button, link) in the currently open browser "
+                "using a CSS selector."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS selector to click.",
+                    }
+                },
+                "required": ["selector"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_fill_form",
+            "description": "Types text into a form field in the browser using a CSS selector.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {"type": "string"},
+                    "text": {"type": "string"},
+                },
+                "required": ["selector", "text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_scroll",
+            "description": "Scrolls the currently open web page up or down.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "direction": {
+                        "type": "string",
+                        "description": "'down' or 'up'",
+                    },
+                    "amount": {
+                        "type": "integer",
+                        "description": "Amount of pixels to scroll. Default 500.",
+                    },
+                },
+                "required": ["direction"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "switch_browser",
+            "description": "Switches the active automation session to a different browser.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "browser_name": {
+                        "type": "string",
+                        "description": "brave, chrome, edge, or firefox",
+                    }
+                },
+                "required": ["browser_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "click_visual_element",
+            "description": (
+                "Uses computer vision (OpenCV) to find an image template on the screen "
+                "and physically clicks it."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "image_name": {
+                        "type": "string",
+                        "description": "The filename of the template (e.g. 'settings_icon.png').",
+                    }
+                },
+                "required": ["image_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fill_visual_form",
+            "description": "Uses computer vision to find a text field visually and types text into it.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "image_name": {"type": "string"},
+                    "text": {"type": "string"},
+                },
+                "required": ["image_name", "text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "focus_app_window",
+            "description": "Brings an application window to the foreground (e.g., 'notepad', 'chrome').",
+            "parameters": {
+                "type": "object",
+                "properties": {"app_name": {"type": "string"}},
+                "required": ["app_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "close_app_window",
+            "description": "Closes an active application window.",
+            "parameters": {
+                "type": "object",
+                "properties": {"app_name": {"type": "string"}},
+                "required": ["app_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "minimize_app_window",
+            "description": "Minimizes an active application window.",
+            "parameters": {
+                "type": "object",
+                "properties": {"app_name": {"type": "string"}},
+                "required": ["app_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "switch_active_window",
+            "description": "Simulates Alt+Tab to cycle to the next open window.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_open_windows",
+            "description": "Retrieves a list of all currently open application windows on the desktop.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_timer_ui",
+            "description": (
+                "Opens the Windows Clock app and visually sets a timer on the screen. "
+                "Use this when the user asks you to set a timer for a specific duration."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "hours": {
+                        "type": "string",
+                        "description": "The number of hours for the timer (e.g. '1', '0').",
+                    },
+                    "minutes": {
+                        "type": "string",
+                        "description": "The number of minutes for the timer (e.g. '15', '0').",
+                    },
+                    "seconds": {
+                        "type": "string",
+                        "description": "The number of seconds for the timer (e.g. '30', '0').",
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Optional name or label for the timer (e.g. 'Pasta').",
+                    },
+                },
+                "required": ["hours", "minutes", "seconds"],
             },
         },
     },
@@ -154,29 +427,57 @@ TOOLS = [
 # ─────────────────────────────────────────────────────────────────────────────
 # ACTION-ONLY TOOLS
 # These tools perform a physical action and need no LLM Round 2 summary.
-# We skip the second API call and return a pre-built spoken reply instantly,
-# making the response feel much faster.
+# We skip the second API call and return a pre-built spoken reply instantly.
 # ─────────────────────────────────────────────────────────────────────────────
+
 _ACTION_ONLY_TOOLS = {
     "launch_application",
     "type_text",
-    "search_in_browser",
     "sleep_computer",
     "shutdown_computer",
     "terminate_process",
+    "take_selfie",
+    "record_video",
+    "set_timer_ui",
+    "cancel_action",
+    "open_browser_url",
+    "search_google",
+    "search_youtube",
+    "browser_click_element",
+    "browser_fill_form",
+    "browser_scroll",
+    "switch_browser",
+    "click_visual_element",
+    "fill_visual_form",
+    "focus_app_window",
+    "close_app_window",
+    "minimize_app_window",
+    "switch_active_window",
+    "get_open_windows",
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# FORMATTING HINT — injected on retry to break malformed tool call syntax
+# ─────────────────────────────────────────────────────────────────────────────
+
+_TOOL_FORMAT_HINT = {
+    "role": "system",
+    "content": (
+        "CRITICAL FORMATTING RULE: You MUST use the standard JSON tool_calls format only. "
+        "Do NOT use <function=tool_name{...}> syntax under any circumstances. "
+        "Always call tools using the proper OpenAI-compatible tool_calls JSON structure."
+    ),
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TOOL EXECUTOR
 # ─────────────────────────────────────────────────────────────────────────────
+
 def execute_tool(tool_name: str, tool_args: dict) -> tuple[str, str]:
     """
     Executes the physical tool on the user's Windows machine.
-
     Returns a tuple of:
       (tool_result_for_llm, instant_spoken_reply)
-
     instant_spoken_reply is non-empty only for action-only tools where we
     can skip Round 2 entirely and reply immediately without a second API call.
     """
@@ -187,19 +488,16 @@ def execute_tool(tool_name: str, tool_args: dict) -> tuple[str, str]:
         app = tool_args.get("app_name", "").lower()
         success = launch_app(app)
         if success:
-            tool_result = f"Successfully launched {app}."
-            spoken = f"Opening {app}."
+            return f"Successfully launched {app}.", f"Opening {app}."
         else:
-            tool_result = f"Could not find '{app}'."
-            spoken = f"I could not find an app named {app}."
-        return tool_result, spoken
+            return f"Could not find '{app}'.", f"I could not find an app named {app}."
 
     # ── type_text ─────────────────────────────────────────────────────────────
     elif tool_name == "type_text":
         text = tool_args.get("text", "")
         time.sleep(0.5)
         pyautogui.write(text, interval=0.04)
-        return f"Typed: '{text}'.", f"Done. I've typed that for you."
+        return f"Typed: '{text}'.", "Done. I have typed that for you."
 
     # ── web_search ────────────────────────────────────────────────────────────
     elif tool_name == "web_search":
@@ -209,7 +507,7 @@ def execute_tool(tool_name: str, tool_args: dict) -> tuple[str, str]:
             results = ddgs.text(query, max_results=3)
             if not results:
                 return "Web search returned no results.", ""
-            combined = " ".join([r['body'] for r in results])
+            combined = " ".join([r["body"] for r in results])
             return f"Live web data for '{query}': {combined}", ""  # Needs LLM Round 2
         except Exception as e:
             return f"Web search failed: {e}", "I had trouble searching the web. Please try again."
@@ -226,7 +524,6 @@ def execute_tool(tool_name: str, tool_args: dict) -> tuple[str, str]:
 
     # ── terminate_process ─────────────────────────────────────────────────────
     elif tool_name == "terminate_process":
-        import subprocess
         process = tool_args.get("process_name", "cmd").lower().strip()
         aliases = {
             "terminal": "cmd.exe",
@@ -237,6 +534,8 @@ def execute_tool(tool_name: str, tool_args: dict) -> tuple[str, str]:
             "brave": "brave.exe",
             "browser": "brave.exe",
             "edge": "msedge.exe",
+            "chrome": "chrome.exe",
+            "firefox": "firefox.exe",
         }
         exe = aliases.get(process, process if process.endswith(".exe") else process + ".exe")
         try:
@@ -251,23 +550,143 @@ def execute_tool(tool_name: str, tool_args: dict) -> tuple[str, str]:
         except Exception as e:
             return f"Failed to terminate process: {e}", "I had trouble closing that process."
 
-    # ── search_in_browser ─────────────────────────────────────────────────────
-    elif tool_name == "search_in_browser":
-        query = tool_args.get("query", "")
-        search_in_browser(query)
-        return f"Opened Brave and searched for '{query}'.", f"Searching for {query} in Brave."
+    # ── open_browser_url ──────────────────────────────────────────────────────
+    elif tool_name == "open_browser_url":
+        url = tool_args.get("url", "")
+        browser_name = tool_args.get("browser_name", "brave")
+        open_browser(url, browser_name)
+        return f"Opened {browser_name} at {url}.", f"Opening {browser_name}."
 
+    # ── search_google ─────────────────────────────────────────────────────────
+    elif tool_name == "search_google":
+        query = tool_args.get("query", "")
+        search_web(query)
+        return f"Googled '{query}'.", f"Searching Google for {query}."
+
+    # ── search_youtube ────────────────────────────────────────────────────────
+    elif tool_name == "search_youtube":
+        query = tool_args.get("query", "")
+        search_youtube(query)
+        return f"Searched YouTube for '{query}'.", "Opening YouTube."
+
+    # ── browser_click_element ─────────────────────────────────────────────────
+    elif tool_name == "browser_click_element":
+        selector = tool_args.get("selector", "")
+        success = click_element(selector)
+        if success:
+            return f"Clicked element '{selector}'.", "Clicking."
+        return "Failed to click element.", "I could not click that element."
+
+    # ── browser_fill_form ─────────────────────────────────────────────────────
+    elif tool_name == "browser_fill_form":
+        selector = tool_args.get("selector", "")
+        text = tool_args.get("text", "")
+        fill_form(selector, text)
+        return f"Filled form field '{selector}' with text.", f"Typing {text}."
+
+    # ── browser_scroll ────────────────────────────────────────────────────────
+    elif tool_name == "browser_scroll":
+        direction = tool_args.get("direction", "down")
+        amount = tool_args.get("amount", 500)
+        scroll_page(direction, amount)
+        return f"Scrolled {direction} by {amount} pixels.", "Scrolling."
+
+    # ── switch_browser ────────────────────────────────────────────────────────
+    elif tool_name == "switch_browser":
+        browser_name = tool_args.get("browser_name", "brave")
+        switch_browser(browser_name)
+        return f"Switched to {browser_name}.", f"Switching to {browser_name}."
+
+    # ── click_visual_element ──────────────────────────────────────────────────
+    elif tool_name == "click_visual_element":
+        image_name = tool_args.get("image_name", "")
+        success = find_and_click(image_name)
+        if success:
+            return f"Clicked visual element '{image_name}'.", f"Clicking {image_name}."
+        return f"Could not find '{image_name}' on screen.", f"I could not find {image_name} on screen."
+
+    # ── fill_visual_form ──────────────────────────────────────────────────────
+    elif tool_name == "fill_visual_form":
+        image_name = tool_args.get("image_name", "")
+        text = tool_args.get("text", "")
+        success = find_and_type(image_name, text)
+        if success:
+            return f"Typed into visual form '{image_name}'.", f"Typing {text}."
+        return f"Could not find '{image_name}' on screen.", f"I could not find {image_name}."
+
+    # ── focus_app_window ──────────────────────────────────────────────────────
+    elif tool_name == "focus_app_window":
+        app = tool_args.get("app_name", "")
+        focus_window(app)
+        return f"Focused window '{app}'.", f"Bringing {app} to the front."
+
+    # ── close_app_window ──────────────────────────────────────────────────────
+    elif tool_name == "close_app_window":
+        app = tool_args.get("app_name", "")
+        close_window(app)
+        return f"Closed window '{app}'.", f"Closing {app}."
+
+    # ── minimize_app_window ───────────────────────────────────────────────────
+    elif tool_name == "minimize_app_window":
+        app = tool_args.get("app_name", "")
+        minimize_window(app)
+        return f"Minimized window '{app}'.", f"Minimizing {app}."
+
+    # ── switch_active_window ──────────────────────────────────────────────────
+    elif tool_name == "switch_active_window":
+        switch_window()
+        return "Switched to next window.", "Switching windows."
+
+    # ── get_open_windows ──────────────────────────────────────────────────────
+    elif tool_name == "get_open_windows":
+        windows = list_open_windows()
+        windows_str = ", ".join(windows) if windows else "No windows found."
+        return f"Open windows: {windows_str}", ""  # Needs LLM Round 2 to summarize naturally
+
+    # ── take_selfie ───────────────────────────────────────────────────────────
+    elif tool_name == "take_selfie":
+        take_selfie()
+        return "Camera macro triggered successfully.", "Opening camera and taking a picture."
+
+    # ── record_video ──────────────────────────────────────────────────────────
+    elif tool_name == "record_video":
+        duration = tool_args.get("duration_seconds", 10)
+        success = record_video(duration)
+        if success:
+            return f"Recorded video for {duration} seconds.", f"Recording a video for {duration} seconds."
+        return "Video recording was cancelled.", "Video recording cancelled."
+
+    # ── cancel_action ─────────────────────────────────────────────────────────
+    elif tool_name == "cancel_action":
+        trigger_cancellation()
+        return "Cancellation flag raised.", "Cancelling the previous action."
+
+    # ── set_timer_ui ──────────────────────────────────────────────────────────
+    elif tool_name == "set_timer_ui":
+        h = tool_args.get("hours", "0")
+        m = tool_args.get("minutes", "0")
+        s = tool_args.get("seconds", "0")
+        label = tool_args.get("label", "")
+        set_timer(h, m, s, label)
+        spoken_parts = []
+        if h and h != "0": spoken_parts.append(f"{h} hour{'s' if int(h) > 1 else ''}")
+        if m and m != "0": spoken_parts.append(f"{m} minute{'s' if int(m) > 1 else ''}")
+        if s and s != "0": spoken_parts.append(f"{s} second{'s' if int(s) > 1 else ''}")
+        spoken_duration = " and ".join(spoken_parts) if spoken_parts else "the specified duration"
+        return "Timer macro triggered.", f"Setting a timer for {spoken_duration}."
+
+    # ── fallback ──────────────────────────────────────────────────────────────
     return f"Unknown tool '{tool_name}'.", "I encountered an unknown command."
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # THE JARVIS AGENT
 # ─────────────────────────────────────────────────────────────────────────────
+
 class JarvisAgent:
     def __init__(self):
         self.client = Groq(api_key=GROQ_API_KEY)
         self.model = LLM_MODEL
-
         system_instructions = (
             "You are JARVIS, an advanced AI assistant running directly on the user's Windows PC. "
             "You are highly intelligent, concise, and extremely professional. "
@@ -277,117 +696,177 @@ class JarvisAgent:
             "Do NOT roleplay as the Iron Man movie character. Do not mention suits. "
             "Do NOT use markdown (*, #, _, [, ]) because your replies go directly to Text-to-Speech. "
             "Use plain English only. "
-            "CRITICAL SAFETY INSTRUCTION: NEVER call the shutdown_computer or sleep_computer tools unless the user EXPLICITLY and CLEARLY commands you to 'shut down' or 'sleep' the computer."
+            "CRITICAL SAFETY INSTRUCTION: NEVER call the shutdown_computer or sleep_computer tools "
+            "unless the user EXPLICITLY commands it."
         )
         self.memory = ConversationalMemory(system_prompt=system_instructions)
         logger.info("Groq Agent with Tool Calling Online.")
 
     def _reset_memory(self):
-        """Clears conversation history to recover from corrupt context (e.g. after a 400 error)."""
+        """Clears conversation history to recover from corrupt context."""
         system_msg = self.memory.history[0]
         self.memory.history = [system_msg]
-        logger.warning("Conversation memory reset to recover from API error.")
+        logger.warning("Conversation memory fully reset to recover from API error.")
+
+    def _inject_format_hint(self):
+        """Inserts the tool format hint after the system prompt to guide the model on retry."""
+        # Avoid duplicate hints
+        self._remove_format_hint()
+        self.memory.history.insert(1, _TOOL_FORMAT_HINT)
+
+    def _remove_format_hint(self):
+        """Removes any injected format hints from memory to keep history clean."""
+        self.memory.history = [
+            m for m in self.memory.history
+            if not (
+                m.get("role") == "system"
+                and "CRITICAL FORMATTING RULE" in m.get("content", "")
+            )
+        ]
 
     def think(self, user_text: str) -> str:
-        """
-        The agentic think loop using Groq Tool Calling.
-
-        Round 1: Ask Groq what to do (tool call or conversation).
-        Execute:  Run the real tool on the user's PC immediately.
-        Round 2:  Only called for informational tools (web_search) that need
-                  the LLM to summarize results. Action-only tools skip this
-                  entirely, returning a pre-built reply for zero extra latency.
-        """
         if not GROQ_API_KEY or GROQ_API_KEY == "your_groq_api_key_here":
             return "My Groq API key is missing. Please add it to your environment variables."
 
         self.memory.add_user_message(user_text)
-        messages = self.memory.get_context()
 
-        logger.info("Sending context to Groq with Tool Calling enabled...")
-        try:
-            # ── ROUND 1: Ask Groq what to do ──────────────────────────────────
-            # temperature=0.1 for tool selection — needs to be deterministic,
-            # not creative. This prevents malformed JSON tool arguments.
-            response = self.client.chat.completions.create(
-                messages=messages,
-                model=self.model,
-                tools=TOOLS,
-                tool_choice="auto",
-                temperature=0.1,
-            )
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                messages = self.memory.get_context()
+                logger.info(f"Sending context to Groq (Attempt {attempt + 1}/{max_retries})...")
 
-            response_message = response.choices[0].message
-            tool_calls = response_message.tool_calls
+                response = self.client.chat.completions.create(
+                    messages=messages,
+                    model=self.model,
+                    tools=TOOLS,
+                    tool_choice="auto",
+                    temperature=0.1,
+                    parallel_tool_calls=False,
+                )
 
-            # ── Did the LLM decide to call a tool? ────────────────────────────
-            if tool_calls:
-                # Serialize the Pydantic object to a plain dict so context_manager's
-                # .get() calls in _trim_memory don't crash on a ChatCompletionMessage.
-                serialized_tool_calls = [
-                    {
-                        "id": tc.id,
-                        "type": tc.type,
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments,
-                        },
-                    }
-                    for tc in tool_calls
-                ]
-                messages.append({
-                    "role": "assistant",
-                    "content": response_message.content,  # None when tool_calls are present
-                    "tool_calls": serialized_tool_calls,
-                })
+                response_message = response.choices[0].message
+                tool_calls = response_message.tool_calls
 
-                final_reply = None
-                needs_round_2 = False
-
-                for tool_call in tool_calls:
-                    tool_name = tool_call.function.name
-                    tool_args = json.loads(tool_call.function.arguments)
-
-                    tool_result, instant_reply = execute_tool(tool_name, tool_args)
-                    logger.info(f"Tool result: {tool_result}")
-
+                if tool_calls:
+                    # Serialize tool calls for memory storage
+                    serialized_tool_calls = [
+                        {
+                            "id": tc.id,
+                            "type": tc.type,
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in tool_calls
+                    ]
                     messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": tool_result,
+                        "role": "assistant",
+                        "content": response_message.content,
+                        "tool_calls": serialized_tool_calls,
                     })
 
-                    # Track the quick reply and whether Round 2 is needed
-                    if tool_name not in _ACTION_ONLY_TOOLS:
-                        needs_round_2 = True
-                    elif final_reply is None:
-                        final_reply = instant_reply  # Use pre-built reply for action tools
+                    final_reply = None
+                    needs_round_2 = False
 
-                # ── ROUND 2: Only for tools that need LLM to summarize data ───
-                if needs_round_2:
-                    logger.info("Round 2: LLM summarizing tool output...")
-                    final_response = self.client.chat.completions.create(
-                        messages=messages,
-                        model=self.model,
-                        temperature=0.7,  # Conversational tone for the spoken reply
+                    for tool_call in tool_calls:
+                        tool_name = tool_call.function.name
+                        tool_args = json.loads(tool_call.function.arguments)
+                        tool_result, instant_reply = execute_tool(tool_name, tool_args)
+
+                        logger.info(f"Tool result: {tool_result}")
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": tool_result,
+                        })
+
+                        if tool_name not in _ACTION_ONLY_TOOLS:
+                            needs_round_2 = True
+                        elif final_reply is None:
+                            final_reply = instant_reply
+
+                    if needs_round_2:
+                        logger.info("Round 2: LLM summarizing tool output...")
+                        final_response = self.client.chat.completions.create(
+                            messages=messages,
+                            model=self.model,
+                            temperature=0.7,
+                        )
+                        final_reply = final_response.choices[0].message.content
+
+                    if final_reply is None:
+                        final_reply = "Done."
+
+                else:
+                    # Pure conversational reply — no tool called
+                    final_reply = response_message.content
+
+                # Success — clean up any hints and save to memory
+                self._remove_format_hint()
+                self.memory.add_assistant_message(final_reply)
+                return final_reply
+
+            except Exception as e:
+                error_str = str(e)
+
+                # ── Groq model decommissioned ──────────────────────────────────
+                if "model_decommissioned" in error_str.lower():
+                    logger.error(f"Model decommissioned: {error_str}")
+                    self._reset_memory()
+                    return (
+                        "My language model has been retired by Groq. "
+                        "Please update LLM_MODEL in config.py to llama-3.3-70b-versatile."
                     )
-                    final_reply = final_response.choices[0].message.content
-                elif final_reply is None:
-                    final_reply = "Done."
 
-            else:
-                # Pure conversational answer — no tool needed
-                final_reply = response_message.content
+                # ── Tool call formatting bug (400 / tool_use_failed) ───────────
+                elif "400" in error_str or "tool_use_failed" in error_str.lower() or "tool call validation" in error_str.lower():
+                    logger.warning(
+                        f"Groq tool format bug on attempt {attempt + 1}: {error_str}"
+                    )
 
-            self.memory.add_assistant_message(final_reply)
-            return final_reply
+                    if attempt < max_retries - 1:
+                        # Strip the bad user message so we can re-add it cleanly
+                        self.memory.history = [
+                            m for m in self.memory.history
+                            if not (
+                                m.get("role") == "user"
+                                and m.get("content") == user_text
+                            )
+                        ]
+                        # Inject formatting hint and retry
+                        self._inject_format_hint()
+                        self.memory.add_user_message(user_text)
+                        logger.info("Injected format hint. Retrying...")
+                        continue
+                    else:
+                        # All retries exhausted
+                        self._reset_memory()
+                        return (
+                            "I am having repeated trouble formatting that command. "
+                            "Please try rephrasing it."
+                        )
 
-        except Exception as e:
-            error_str = str(e)
-            # ── 400 Bad Request: context is corrupt — reset and recover ────────
-            if "400" in error_str or "bad_request" in error_str.lower():
-                logger.error(f"Groq 400 error — resetting memory to recover. Error: {e}")
-                self._reset_memory()
-                return "I had a brief memory hiccup. Could you repeat that?"
-            logger.error(f"Groq Agent Error: {e}")
-            return "I am having trouble with my neural network right now."
+                # ── Unauthorized / bad API key ─────────────────────────────────
+                elif "401" in error_str or "invalid_api_key" in error_str.lower():
+                    logger.error(f"Invalid Groq API key: {error_str}")
+                    return (
+                        "My API key is invalid. "
+                        "Please check your GROQ_API_KEY in the dot env file."
+                    )
+
+                # ── Rate limit ─────────────────────────────────────────────────
+                elif "429" in error_str or "rate_limit" in error_str.lower():
+                    logger.warning(f"Rate limited by Groq: {error_str}")
+                    wait_time = 5 * (attempt + 1)
+                    logger.info(f"Waiting {wait_time}s before retry...")
+                    time.sleep(wait_time)
+                    continue
+
+                # ── Unknown error ──────────────────────────────────────────────
+                else:
+                    logger.error(f"Groq Agent Error: {error_str}")
+                    return "I am having trouble connecting to my neural network right now."
+
+        return "I was unable to process that request after multiple attempts. Please try again."

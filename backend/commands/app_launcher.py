@@ -95,6 +95,22 @@ def launch_app(app_name: str) -> bool:
             webbrowser.open("about:blank")
             return True
 
+    # 0. Intercept common web apps so they don't fail looking for a local download
+    WEB_APPS = {
+        "youtube": "https://www.youtube.com",
+        "gmail": "https://mail.google.com",
+        "netflix": "https://www.netflix.com",
+        "facebook": "https://www.facebook.com",
+        "twitter": "https://www.twitter.com",
+        "instagram": "https://www.instagram.com",
+        "google": "https://www.google.com",
+    }
+    
+    if app_name in WEB_APPS:
+        logger.info(f"Intercepted web app request for {app_name}, opening in browser.")
+        open_url_in_browser(WEB_APPS[app_name], prefer_brave=True)
+        return True
+
     # 1. Check explicit mappings
     if app_name in app_paths and app_paths[app_name]:
         logger.info("Commanding OS to launch %s...", app_name)
