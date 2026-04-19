@@ -28,7 +28,17 @@ class ConversationalMemory:
         self._trim_memory()
 
     def get_context(self) -> list:
-        return self.history
+        import datetime
+        context = list(self.history)
+        
+        # Dynamically inject the exact current date and time into the system prompt
+        # so the LLM ALWAYS knows what day it is without needing a web search tool.
+        now = datetime.datetime.now().strftime("%A, %B %d, %Y %I:%M %p")
+        system_msg = context[0].copy()
+        system_msg["content"] = f"{system_msg['content']}\nThe current date and time is {now}."
+        context[0] = system_msg
+        
+        return context
 
     def _trim_memory(self):
         """
