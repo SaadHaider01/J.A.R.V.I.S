@@ -3,6 +3,7 @@ import edge_tts
 import os
 import tempfile
 import ctypes
+import threading
 from config import TTS_VOICE
 
 def play_audio_windows(file_path):
@@ -46,7 +47,12 @@ def speak(text: str, voice: str = TTS_VOICE):
         except Exception:
             pass
         
-    asyncio.run(_amain())
+    def _thread_worker():
+        asyncio.run(_amain())
+        
+    t = threading.Thread(target=_thread_worker)
+    t.start()
+    t.join()
 
 if __name__ == "__main__":
     speak("Hello, my systems are now online.")

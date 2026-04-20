@@ -7,9 +7,9 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # API Keys loaded from .env
 OPENWEATHERMAP_API_KEY = config('OPENWEATHERMAP_API_KEY', default='')
-NEWS_API_KEY = config('NEWS_API_KEY', default='')mix until coated. Cover and refrigerate for at least 30 minutes or up to 2 hours.
+NEWS_API_KEY = config('NEWS_API_KEY', default='')
 
-GROQ_API_KEY = config('GROQ_API_KEY', default='')2. Heat 1 tab
+GROQ_API_KEY = config('GROQ_API_KEY', default='')
 
 # AI Model Defaults
 WHISPER_MODEL_SIZE = "small.en" # Better accuracy than base.en, still fast enough for real-time use
