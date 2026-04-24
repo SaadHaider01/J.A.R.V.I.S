@@ -21,6 +21,23 @@ from backend.commands.window_manager import (
     focus_window, minimize_window, close_window,
     switch_window, list_open_windows
 )
+from backend.commands.file_manager import (
+    create_file, delete_file, move_file, copy_file,
+    rename_file, search_files, open_file, list_directory
+)
+from backend.commands.clipboard import get_clipboard, set_clipboard
+from backend.commands.display import set_brightness, get_brightness, take_screenshot
+from backend.commands.audio_control import set_volume, get_volume, mute_volume
+from backend.commands.network import get_wifi_status, list_wifi_networks, connect_wifi, get_ip_address
+from backend.commands.system_info import (
+    get_battery_status, get_cpu_usage, get_ram_usage,
+    list_processes, kill_process_by_name
+)
+from backend.commands.notifications import send_notification
+from backend.commands.keyboard_shortcuts import (
+    lock_screen, show_desktop, take_screenshot_snip,
+    open_task_manager, virtual_desktop_new, virtual_desktop_switch
+)
 
 logger = logging.getLogger("JARVIS.Agent")
 
@@ -422,6 +439,43 @@ TOOLS = [
             },
         },
     },
+    # ── FILE MANAGEMENT TOOLS ────────────────────────────────────────────────
+    {"type": "function", "function": {"name": "create_file", "description": "Creates a new file at a path with optional content.", "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "Full file path to create."}, "content": {"type": "string", "description": "Text content to write. Empty for blank file."}}, "required": ["path"]}}},
+    {"type": "function", "function": {"name": "delete_file", "description": "Safely deletes a file by sending it to the Recycle Bin.", "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "Full path of the file to delete."}}, "required": ["path"]}}},
+    {"type": "function", "function": {"name": "move_file", "description": "Moves a file or folder to a new location.", "parameters": {"type": "object", "properties": {"source": {"type": "string"}, "destination": {"type": "string"}}, "required": ["source", "destination"]}}},
+    {"type": "function", "function": {"name": "copy_file", "description": "Copies a file or folder to a new location.", "parameters": {"type": "object", "properties": {"source": {"type": "string"}, "destination": {"type": "string"}}, "required": ["source", "destination"]}}},
+    {"type": "function", "function": {"name": "rename_file", "description": "Renames a file or folder.", "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "Current full path."}, "new_name": {"type": "string", "description": "New filename (not full path)."}}, "required": ["path", "new_name"]}}},
+    {"type": "function", "function": {"name": "search_files", "description": "Searches for files by name in a directory. Returns matching file paths.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Filename or partial name to search for."}, "directory": {"type": "string", "description": "Directory to search in. Defaults to user home."}}, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "open_file", "description": "Opens a file with its default Windows application.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
+    {"type": "function", "function": {"name": "list_directory", "description": "Lists all files and folders in a directory.", "parameters": {"type": "object", "properties": {"directory": {"type": "string", "description": "Directory path. Defaults to Desktop."}}, "required": []}}},
+    # ── CLIPBOARD TOOLS ──────────────────────────────────────────────────────
+    {"type": "function", "function": {"name": "get_clipboard", "description": "Reads the current text content from the clipboard.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "set_clipboard", "description": "Copies text to the clipboard so the user can paste it.", "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}},
+    # ── DISPLAY TOOLS ────────────────────────────────────────────────────────
+    {"type": "function", "function": {"name": "set_brightness", "description": "Sets the screen brightness to a percentage (0-100).", "parameters": {"type": "object", "properties": {"level": {"type": "integer", "description": "Brightness percentage 0-100."}}, "required": ["level"]}}},
+    {"type": "function", "function": {"name": "take_screenshot", "description": "Captures a full screenshot and saves it to disk.", "parameters": {"type": "object", "properties": {"filename": {"type": "string", "description": "Optional filename. Auto-generated if empty."}}, "required": []}}},
+    # ── AUDIO TOOLS ──────────────────────────────────────────────────────────
+    {"type": "function", "function": {"name": "set_volume", "description": "Sets the system master volume to a percentage (0-100).", "parameters": {"type": "object", "properties": {"level": {"type": "integer", "description": "Volume percentage 0-100."}}, "required": ["level"]}}},
+    {"type": "function", "function": {"name": "mute_volume", "description": "Toggles the system mute on or off.", "parameters": {"type": "object", "properties": {}}}},
+    # ── NETWORK TOOLS ────────────────────────────────────────────────────────
+    {"type": "function", "function": {"name": "get_wifi_status", "description": "Returns current WiFi connection status, network name, and signal strength.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "connect_wifi", "description": "Connects to a WiFi network by name.", "parameters": {"type": "object", "properties": {"ssid": {"type": "string", "description": "WiFi network name."}, "password": {"type": "string", "description": "WiFi password. Optional for saved networks."}}, "required": ["ssid"]}}},
+    {"type": "function", "function": {"name": "get_ip_address", "description": "Returns the local (LAN) and public (WAN) IP address.", "parameters": {"type": "object", "properties": {}}}},
+    # ── SYSTEM INFO TOOLS ────────────────────────────────────────────────────
+    {"type": "function", "function": {"name": "get_battery_status", "description": "Returns battery percentage and charging state.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "get_cpu_usage", "description": "Returns the current CPU usage percentage.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "get_ram_usage", "description": "Returns RAM usage: total, used, available, and percentage.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "list_processes", "description": "Returns the top resource-consuming processes on the system.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "kill_process_by_name", "description": "Kills a running process by its name. Use for 'kill chrome', 'end spotify', etc.", "parameters": {"type": "object", "properties": {"name": {"type": "string", "description": "Process name to kill."}}, "required": ["name"]}}},
+    # ── NOTIFICATION TOOLS ───────────────────────────────────────────────────
+    {"type": "function", "function": {"name": "send_notification", "description": "Shows a Windows toast notification popup.", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "message": {"type": "string"}}, "required": ["title", "message"]}}},
+    # ── KEYBOARD SHORTCUT TOOLS ──────────────────────────────────────────────
+    {"type": "function", "function": {"name": "lock_screen", "description": "Locks the PC screen immediately (Win+L).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "show_desktop", "description": "Minimizes all windows and shows the desktop (Win+D).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "take_screenshot_snip", "description": "Opens the Windows Snipping Tool for a region screenshot (Win+Shift+S).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "open_task_manager", "description": "Opens Windows Task Manager.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "virtual_desktop_new", "description": "Creates a new virtual desktop.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "virtual_desktop_switch", "description": "Switches to the next or previous virtual desktop.", "parameters": {"type": "object", "properties": {"direction": {"type": "string", "description": "'left' or 'right'. Defaults to 'right'."}}, "required": []}}},
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -454,6 +508,27 @@ _ACTION_ONLY_TOOLS = {
     "minimize_app_window",
     "switch_active_window",
     "get_open_windows",
+    # ── New Total Control tools ──
+    "create_file",
+    "delete_file",
+    "move_file",
+    "copy_file",
+    "rename_file",
+    "open_file",
+    "set_clipboard",
+    "set_brightness",
+    "take_screenshot",
+    "set_volume",
+    "mute_volume",
+    "connect_wifi",
+    "kill_process_by_name",
+    "send_notification",
+    "lock_screen",
+    "show_desktop",
+    "take_screenshot_snip",
+    "open_task_manager",
+    "virtual_desktop_new",
+    "virtual_desktop_switch",
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -674,6 +749,199 @@ def execute_tool(tool_name: str, tool_args: dict) -> tuple[str, str]:
         if s and s != "0": spoken_parts.append(f"{s} second{'s' if int(s) > 1 else ''}")
         spoken_duration = " and ".join(spoken_parts) if spoken_parts else "the specified duration"
         return "Timer macro triggered.", f"Setting a timer for {spoken_duration}."
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # NEW TOTAL CONTROL TOOLS
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    # ── create_file ───────────────────────────────────────────────────────────
+    elif tool_name == "create_file":
+        path = tool_args.get("path", "")
+        content = tool_args.get("content", "")
+        if create_file(path, content):
+            return f"Created file at {path}.", f"File created at {path}."
+        return f"Failed to create file at {path}.", f"I could not create the file."
+
+    # ── delete_file ───────────────────────────────────────────────────────────
+    elif tool_name == "delete_file":
+        path = tool_args.get("path", "")
+        if delete_file(path):
+            return f"Deleted {path}.", f"File deleted."
+        return f"Failed to delete {path}.", f"I could not delete that file."
+
+    # ── move_file ─────────────────────────────────────────────────────────────
+    elif tool_name == "move_file":
+        src = tool_args.get("source", "")
+        dst = tool_args.get("destination", "")
+        if move_file(src, dst):
+            return f"Moved {src} to {dst}.", f"File moved."
+        return f"Failed to move {src}.", f"I could not move that file."
+
+    # ── copy_file ─────────────────────────────────────────────────────────────
+    elif tool_name == "copy_file":
+        src = tool_args.get("source", "")
+        dst = tool_args.get("destination", "")
+        if copy_file(src, dst):
+            return f"Copied {src} to {dst}.", f"File copied."
+        return f"Failed to copy {src}.", f"I could not copy that file."
+
+    # ── rename_file ───────────────────────────────────────────────────────────
+    elif tool_name == "rename_file":
+        path = tool_args.get("path", "")
+        new_name = tool_args.get("new_name", "")
+        if rename_file(path, new_name):
+            return f"Renamed to {new_name}.", f"Renamed to {new_name}."
+        return f"Failed to rename {path}.", f"I could not rename that file."
+
+    # ── search_files ──────────────────────────────────────────────────────────
+    elif tool_name == "search_files":
+        query = tool_args.get("query", "")
+        directory = tool_args.get("directory", "")
+        results = search_files(query, directory)
+        if results:
+            files_str = "\n".join(results[:10])
+            return f"Found {len(results)} files:\n{files_str}", ""  # Needs Round 2
+        return "No files found matching that name.", ""
+
+    # ── open_file ─────────────────────────────────────────────────────────────
+    elif tool_name == "open_file":
+        path = tool_args.get("path", "")
+        if open_file(path):
+            return f"Opened {path}.", f"Opening the file."
+        return f"File not found: {path}.", f"I could not find that file."
+
+    # ── list_directory ────────────────────────────────────────────────────────
+    elif tool_name == "list_directory":
+        directory = tool_args.get("directory", "")
+        items = list_directory(directory)
+        if items:
+            listing = "\n".join(items[:20])
+            return f"Directory contents:\n{listing}", ""  # Needs Round 2
+        return "Directory is empty or not found.", ""
+
+    # ── get_clipboard ─────────────────────────────────────────────────────────
+    elif tool_name == "get_clipboard":
+        content = get_clipboard()
+        return f"Clipboard content: {content}", ""  # Needs Round 2
+
+    # ── set_clipboard ─────────────────────────────────────────────────────────
+    elif tool_name == "set_clipboard":
+        text = tool_args.get("text", "")
+        if set_clipboard(text):
+            return "Text copied to clipboard.", "Copied to clipboard."
+        return "Failed to set clipboard.", "I could not copy that to the clipboard."
+
+    # ── set_brightness ────────────────────────────────────────────────────────
+    elif tool_name == "set_brightness":
+        level = tool_args.get("level", 50)
+        if set_brightness(level):
+            return f"Brightness set to {level}%.", f"Brightness set to {level} percent."
+        return "Failed to set brightness.", "I could not change the brightness."
+
+    # ── take_screenshot ───────────────────────────────────────────────────────
+    elif tool_name == "take_screenshot":
+        filename = tool_args.get("filename", "")
+        path = take_screenshot(filename)
+        if path:
+            return f"Screenshot saved to {path}.", "Screenshot taken and saved."
+        return "Failed to take screenshot.", "I could not take the screenshot."
+
+    # ── set_volume ────────────────────────────────────────────────────────────
+    elif tool_name == "set_volume":
+        level = tool_args.get("level", 50)
+        if set_volume(level):
+            return f"Volume set to {level}%.", f"Volume set to {level} percent."
+        return "Failed to set volume.", "I could not change the volume."
+
+    # ── mute_volume ───────────────────────────────────────────────────────────
+    elif tool_name == "mute_volume":
+        if mute_volume():
+            return "Mute toggled.", "Mute toggled."
+        return "Failed to toggle mute.", "I could not toggle mute."
+
+    # ── get_wifi_status ───────────────────────────────────────────────────────
+    elif tool_name == "get_wifi_status":
+        status = get_wifi_status()
+        return f"WiFi status: {json.dumps(status)}", ""  # Needs Round 2
+
+    # ── connect_wifi ──────────────────────────────────────────────────────────
+    elif tool_name == "connect_wifi":
+        ssid = tool_args.get("ssid", "")
+        password = tool_args.get("password", "")
+        if connect_wifi(ssid, password):
+            return f"Connected to {ssid}.", f"Connected to {ssid}."
+        return f"Failed to connect to {ssid}.", f"I could not connect to {ssid}."
+
+    # ── get_ip_address ────────────────────────────────────────────────────────
+    elif tool_name == "get_ip_address":
+        info = get_ip_address()
+        return f"IP addresses: {json.dumps(info)}", ""  # Needs Round 2
+
+    # ── get_battery_status ────────────────────────────────────────────────────
+    elif tool_name == "get_battery_status":
+        info = get_battery_status()
+        return f"Battery: {json.dumps(info)}", ""  # Needs Round 2
+
+    # ── get_cpu_usage ─────────────────────────────────────────────────────────
+    elif tool_name == "get_cpu_usage":
+        usage = get_cpu_usage()
+        return f"CPU usage: {usage}%", ""  # Needs Round 2
+
+    # ── get_ram_usage ─────────────────────────────────────────────────────────
+    elif tool_name == "get_ram_usage":
+        info = get_ram_usage()
+        return f"RAM: {json.dumps(info)}", ""  # Needs Round 2
+
+    # ── list_processes ────────────────────────────────────────────────────────
+    elif tool_name == "list_processes":
+        procs = list_processes()
+        return f"Top processes: {json.dumps(procs)}", ""  # Needs Round 2
+
+    # ── kill_process_by_name ──────────────────────────────────────────────────
+    elif tool_name == "kill_process_by_name":
+        name = tool_args.get("name", "")
+        if kill_process_by_name(name):
+            return f"Killed process '{name}'.", f"Done. I have killed {name}."
+        return f"No process found named '{name}'.", f"I could not find a process named {name}."
+
+    # ── send_notification ─────────────────────────────────────────────────────
+    elif tool_name == "send_notification":
+        title = tool_args.get("title", "JARVIS")
+        message = tool_args.get("message", "")
+        if send_notification(title, message):
+            return "Notification sent.", "Notification sent."
+        return "Failed to send notification.", "I could not send the notification."
+
+    # ── lock_screen ───────────────────────────────────────────────────────────
+    elif tool_name == "lock_screen":
+        lock_screen()
+        return "Screen locked.", "Locking the screen."
+
+    # ── show_desktop ──────────────────────────────────────────────────────────
+    elif tool_name == "show_desktop":
+        show_desktop()
+        return "Desktop shown.", "Showing the desktop."
+
+    # ── take_screenshot_snip ──────────────────────────────────────────────────
+    elif tool_name == "take_screenshot_snip":
+        take_screenshot_snip()
+        return "Snipping tool opened.", "Opening the snipping tool."
+
+    # ── open_task_manager ─────────────────────────────────────────────────────
+    elif tool_name == "open_task_manager":
+        open_task_manager()
+        return "Task Manager opened.", "Opening Task Manager."
+
+    # ── virtual_desktop_new ───────────────────────────────────────────────────
+    elif tool_name == "virtual_desktop_new":
+        virtual_desktop_new()
+        return "New virtual desktop created.", "New virtual desktop created."
+
+    # ── virtual_desktop_switch ────────────────────────────────────────────────
+    elif tool_name == "virtual_desktop_switch":
+        direction = tool_args.get("direction", "right")
+        virtual_desktop_switch(direction)
+        return f"Switched virtual desktop {direction}.", f"Switching virtual desktop {direction}."
 
     # ── fallback ──────────────────────────────────────────────────────────────
     return f"Unknown tool '{tool_name}'.", "I encountered an unknown command."

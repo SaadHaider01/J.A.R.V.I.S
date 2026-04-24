@@ -25,4 +25,14 @@ spacy
 # Desktop Control & UI
 PyQt6
 PyAutoGUI
+pygetwindow
+pillow
 
+# Total Laptop Control
+pyperclip
+screen-brightness-control
+pycaw
+comtypes
+psutil
+send2trash
+win10toast
