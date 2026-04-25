@@ -2,6 +2,8 @@ import json
 import logging
 import time
 import subprocess
+import os
+import re
 import pyautogui
 from groq import Groq
 from duckduckgo_search import DDGS
@@ -23,7 +25,8 @@ from backend.commands.window_manager import (
 )
 from backend.commands.file_manager import (
     create_file, delete_file, move_file, copy_file,
-    rename_file, search_files, open_file, list_directory
+    rename_file, search_files, open_file, list_directory,
+    create_directory
 )
 from backend.commands.clipboard import get_clipboard, set_clipboard
 from backend.commands.display import set_brightness, get_brightness, take_screenshot
@@ -448,6 +451,7 @@ TOOLS = [
     {"type": "function", "function": {"name": "search_files", "description": "Searches for files by name in a directory. Returns matching file paths.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Filename or partial name to search for."}, "directory": {"type": "string", "description": "Directory to search in. Defaults to user home."}}, "required": ["query"]}}},
     {"type": "function", "function": {"name": "open_file", "description": "Opens a file with its default Windows application.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
     {"type": "function", "function": {"name": "list_directory", "description": "Lists all files and folders in a directory.", "parameters": {"type": "object", "properties": {"directory": {"type": "string", "description": "Directory path. Defaults to Desktop."}}, "required": []}}},
+    {"type": "function", "function": {"name": "create_directory", "description": "Creates a new folder at the specified path.", "parameters": {"type": "object", "properties": {"dir_path": {"type": "string", "description": "Full path of the folder to create."}}, "required": ["dir_path"]}}},
     # ── CLIPBOARD TOOLS ──────────────────────────────────────────────────────
     {"type": "function", "function": {"name": "get_clipboard", "description": "Reads the current text content from the clipboard.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "set_clipboard", "description": "Copies text to the clipboard so the user can paste it.", "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}},
@@ -510,6 +514,7 @@ _ACTION_ONLY_TOOLS = {
     "get_open_windows",
     # ── New Total Control tools ──
     "create_file",
+    "create_directory",
     "delete_file",
     "move_file",
     "copy_file",
@@ -762,6 +767,13 @@ def execute_tool(tool_name: str, tool_args: dict) -> tuple[str, str]:
             return f"Created file at {path}.", f"File created at {path}."
         return f"Failed to create file at {path}.", f"I could not create the file."
 
+    # ── create_directory ──────────────────────────────────────────────────────
+    elif tool_name == "create_directory":
+        path = tool_args.get("dir_path", "")
+        if create_directory(path):
+            return f"Created directory at {path}.", f"Folder created at {path}."
+        return f"Failed to create directory at {path}.", "I could not create the folder."
+
     # ── delete_file ───────────────────────────────────────────────────────────
     elif tool_name == "delete_file":
         path = tool_args.get("path", "")
@@ -957,15 +969,16 @@ class JarvisAgent:
         self.model = LLM_MODEL
         system_instructions = (
             "You are JARVIS, an advanced AI assistant running directly on the user's Windows PC. "
+            f"The current user is '{os.getlogin()}'. Their home directory is '{os.path.expanduser('~')}'. "
+            "When creating files or folders on the Desktop, always use the path: "
+            f"'{os.path.join(os.path.expanduser('~'), 'Desktop')}'. "
             "You are highly intelligent, concise, and extremely professional. "
             "You have access to tools that let you physically control the user's computer. "
             "ALWAYS prefer using a tool when the user asks you to DO something on their PC. "
             "Only answer conversationally when the user is asking a question or having a discussion. "
             "Do NOT roleplay as the Iron Man movie character. Do not mention suits. "
             "Do NOT use markdown (*, #, _, [, ]) because your replies go directly to Text-to-Speech. "
-            "Use plain English only. "
-            "CRITICAL SAFETY INSTRUCTION: NEVER call the shutdown_computer or sleep_computer tools "
-            "unless the user EXPLICITLY commands it."
+            "Use plain English only."
         )
         self.memory = ConversationalMemory(system_prompt=system_instructions)
         logger.info("Groq Agent with Tool Calling Online.")
@@ -996,6 +1009,12 @@ class JarvisAgent:
         if not GROQ_API_KEY or GROQ_API_KEY == "your_groq_api_key_here":
             return "My Groq API key is missing. Please add it to your environment variables."
 
+        # 1. Check Fast-Track Intent Layer (Milliseconds response)
+        fast_response = self._fast_track_intent(user_text)
+        if fast_response:
+            return fast_response
+
+        # 2. Proceed to LLM for complex queries
         self.memory.add_user_message(user_text)
 
         max_retries = 3
@@ -1138,3 +1157,79 @@ class JarvisAgent:
                     return "I am having trouble connecting to my neural network right now."
 
         return "I was unable to process that request after multiple attempts. Please try again."
+
+    def _fast_track_intent(self, text: str) -> str:
+        """
+        Handles common hardware/OS commands locally using Regex.
+        Returns the spoken response if a match is found, else None.
+        """
+        t = text.lower().strip()
+        
+        # ── VOLUME CONTROL ──
+        vol_match = re.search(r'(?:set|change|put|turn)\s+(?:the\s+)?volume\s+(?:to\s+)?(\d+)', t)
+        if not vol_match:
+            vol_match = re.search(r'volume\s+(\d+)', t)
+        if vol_match:
+            try:
+                level = int(vol_match.group(1))
+                from backend.commands.audio_control import set_volume
+                if set_volume(level):
+                    return f"Volume set to {level} percent."
+            except: pass
+
+        if any(w in t for w in ["mute volume", "silence audio", "toggle mute"]):
+            from backend.commands.audio_control import mute_volume
+            if mute_volume():
+                return "Audio muted."
+
+        # ── BRIGHTNESS ──
+        bri_match = re.search(r'(?:set|change|put|turn)\s+(?:the\s+)?brightness\s+(?:to\s+)?(\d+)', t)
+        if not bri_match:
+            bri_match = re.search(r'brightness\s+(\d+)', t)
+        if bri_match:
+            try:
+                level = int(bri_match.group(1))
+                from backend.commands.display import set_brightness
+                if set_brightness(level):
+                    return f"Brightness set to {level} percent."
+            except: pass
+
+        # ── SYSTEM ACTIONS ──
+        if any(w in t for w in ["lock my computer", "lock screen", "lock the pc"]):
+            from backend.commands.keyboard_shortcuts import lock_screen
+            lock_screen()
+            return "Locking the screen."
+        
+        if any(w in t for w in ["show desktop", "minimize everything", "hide all windows"]):
+            from backend.commands.keyboard_shortcuts import show_desktop
+            show_desktop()
+            return "Showing the desktop."
+
+        if any(w in t for w in ["open task manager", "start task manager"]):
+            from backend.commands.keyboard_shortcuts import open_task_manager
+            open_task_manager()
+            return "Opening Task Manager."
+
+        # ── FILE MANAGEMENT (DESKTOP QUICK-CREATE) ──
+        # Matches "create a folder named X on desktop", "make a folder X on desktop", etc.
+        folder_match = re.search(r'(?:create|make)\s+(?:a\s+)?(?:new\s+)?(?:folder|directory)\s+(?:named\s+|called\s+)?(["\']?[\w\s-]+["\']?)\s+(?:on\s+)?(?:the\s+)?desktop', t)
+        if folder_match:
+            name = folder_match.group(1).strip("'\" ")
+            path = os.path.join(os.path.expanduser("~"), "Desktop", name)
+            from backend.commands.file_manager import create_directory
+            if create_directory(path):
+                return f"Done. I have created the folder {name} on your desktop."
+
+        # ── TERMINAL CONTROL ──
+        if any(w in t for w in ["close terminal", "exit terminal", "terminate terminal", "close command prompt"]):
+            from backend.commands.window_manager import list_open_windows
+            windows = list_open_windows()
+            for win in windows:
+                if any(term in win.lower() for term in ["terminal", "powershell", "cmd.exe", "command prompt"]):
+                    from backend.commands.window_manager import focus_window
+                    if focus_window(win):
+                        pyautogui.hotkey('alt', 'f4')
+                        return "Closing the terminal window."
+            return "I couldn't find an active terminal window to close."
+
+        return None

@@ -16,7 +16,9 @@ WHISPER_MODEL_SIZE = "small.en" # Better accuracy than base.en, still fast enoug
 TTS_VOICE = "en-GB-RyanNeural" # Highly realistic British Male AI Voice
 
 # Agent Settings
-LLM_MODEL = "llama-3.1-8b-instant" # Groq's current recommended model with full tool-calling support
+LLM_MODEL = "llama-3.3-70b-versatile" # Much smarter model, higher accuracy for one-shot tool calling
+
+WAKE_WORD_NAME = os.path.join(BASE_DIR, "models", "jar_vis.onnx")
 
 # Wake Word Settings
 WAKE_WORD_SENSITIVITY = 0.5 # 0.0 to 1.0

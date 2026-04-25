@@ -3,7 +3,7 @@ import numpy as np
 import queue
 import logging
 import collections
-from config import CONVERSATION_TIMEOUT
+from config import CONVERSATION_TIMEOUT, WAKE_WORD_NAME
 from backend.wake_word.detector import WakeWordDetector
 from backend.voice.tts import speak
 from backend.voice.stt import SpeechToText
@@ -37,7 +37,7 @@ class MicrophoneListener:
         self.chunk_size = 1280
         self.audio_queue = queue.Queue()
 
-        self.detector = WakeWordDetector("hey_mycroft")
+        self.detector = WakeWordDetector(WAKE_WORD_NAME)
         self.stt = SpeechToText()
         self.agent = JarvisAgent()
         self.is_listening = False
@@ -126,7 +126,11 @@ class MicrophoneListener:
             blocksize=self.chunk_size,
             callback=self.audio_callback
         ):
-            logger.info("JARVIS is actively listening for 'Hey Mycroft'...")
+                # Dynamic log message based on WAKE_WORD_NAME
+            from config import WAKE_WORD_NAME
+            import os
+            ww_display = os.path.basename(WAKE_WORD_NAME).split('.')[0].replace('_', ' ')
+            logger.info(f"JARVIS is actively listening for '{ww_display}'...")
 
             while self.is_listening:
                 audio_chunk = self.audio_queue.get()

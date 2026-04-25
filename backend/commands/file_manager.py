@@ -12,13 +12,26 @@ def create_file(file_path: str, content: str = "") -> bool:
     Parent directories are created automatically if they don't exist.
     """
     try:
-        target = Path(file_path)
+        # Expand user (~) and env vars in path
+        target = Path(os.path.expandvars(os.path.expanduser(file_path)))
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
-        logger.info(f"Created file: {file_path}")
+        logger.info(f"Created file: {target}")
         return True
     except Exception as e:
         logger.error(f"Failed to create file '{file_path}': {e}")
+        return False
+
+
+def create_directory(dir_path: str) -> bool:
+    """Creates a new directory/folder at the specified path."""
+    try:
+        target = Path(os.path.expandvars(os.path.expanduser(dir_path)))
+        target.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Created directory: {target}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to create directory '{dir_path}': {e}")
         return False
 
 
