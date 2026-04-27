@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger("JARVIS.WakeWord")
 
 class WakeWordDetector:
-    def __init__(self, wake_word="hey_mycroft"):
+    def __init__(self, wake_word="jarvis"):
         """
         Initializes the openwakeword model.
         Available default models: 'hey_mycroft', 'alexa', 'hey_siri', 'timer', 'weather'

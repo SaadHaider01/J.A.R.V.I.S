@@ -11,6 +11,7 @@ sounddevice
 numpy
 soundfile
 webrtcvad
+librosa
 
 # LLM and Internet capabilities
 groq

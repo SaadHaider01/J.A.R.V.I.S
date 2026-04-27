@@ -64,3 +64,5 @@ temp_audio/
 # VS Code / Cursor AI 
 .cursor/
 walkthrough.md
+backend/wake_word/detector.py
+models/hey_jarvis.tflite
