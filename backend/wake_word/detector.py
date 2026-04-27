@@ -22,15 +22,19 @@ class WakeWordDetector:
         Feeds audio chunks into the wake word model.
         Returns True if the wake word was detected in this chunk.
         """
+        from config import WAKE_WORD_SENSITIVITY
+        
         # openwakeword expects 16khz, integer data (int16)
         prediction = self.model.predict(audio_chunk)
         
-        # openwakeword stores predictions in a dictionary keyed by model name.
-        # The value is a confidence score from 0.0 to 1.0.
-        score = list(prediction.values())[0]
+        # Extract the highest score from the prediction dictionary
+        if not prediction:
+            return False
+            
+        score = max(prediction.values())
         
-        # 0.5 is a generic sensitivity threshold. Higher means fewer false positives
-        # but requires you to speak more clearly.
-        if score > 0.5: 
+        # Use the sensitivity threshold from config.py
+        if score > WAKE_WORD_SENSITIVITY: 
+            logger.info(f"Wake word detected with confidence: {score:.2f}")
             return True
         return False
