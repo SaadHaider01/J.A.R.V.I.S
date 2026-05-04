@@ -1,46 +1,154 @@
 # J.A.R.V.I.S 🧠⚡
-> **An advanced, locally-hosted AI personal assistant inspired by Tony Stark's JARVIS.**
+> **A real-time, voice-activated AI assistant with total Windows laptop control.**
 
-[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org)
+[![Python](https://img.shields.io/badge/Python-3.14-blue.svg)](https://www.python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Status: Active](https://img.shields.io/badge/Status-Active%20Development-orange.svg)]()
+[![Status: Operational](https://img.shields.io/badge/Status-Operational-brightgreen.svg)]()
+[![LLM](https://img.shields.io/badge/LLM-Llama%203.3%2070B-purple.svg)](https://groq.com)
 
-JARVIS is a modular, AI-powered desktop assistant built entirely in Python. Unlike basic voice bots, JARVIS is designed with a deep learning pipeline capable of offline wake-word detection, highly accurate local speech transcription, and natural-sounding voice synthesis.
+JARVIS is a fully operational, modular AI desktop assistant built in Python. It listens for a custom-trained wake word, understands natural language commands, and physically controls your Windows PC using 29+ tools — all with millisecond-level response for hardware commands.
 
-## ✨ Core Features (In Development)
-- **👂 Always-Listening Offline Wake Word:** Zero-latency wake word detection powered by [`openwakeword`](https://github.com/dscripka/openWakeWord). No cloud API keys required, running entirely locally on ONNX runtime.
-- **🗣️ Advanced Speech-to-Text (STT):** Powered by OpenAI's `Whisper` model for robust, multi-lingual transcription of user commands.
-- **🔊 Natural Voice Synthesis (TTS):** Uses Microsoft's `edge-tts` combined with `pygame` for seamless, natural-sounding audio responses.
-- **⚙️ Modular Architecture:** Cleanly separated architecture splitting the Wake Word, STT, TTS, NLP Brain, and System Commands into isolated manageable pipelines.
+---
+
+## ✅ What Works Right Now
+
+| Capability | Implementation |
+|---|---|
+| 🎙️ Custom Wake Word | `openWakeWord` + custom `.onnx` model (97%+ confidence) |
+| 🗣️ Speech-to-Text | OpenAI `Whisper` (small.en) with VAD auto-stop |
+| 🔊 Voice Synthesis | Microsoft Edge TTS — British male voice |
+| 🧠 AI Brain | Groq `llama-3.3-70b-versatile` with full tool calling |
+| ⚡ Fast-Track Intents | Local regex layer for instant volume/brightness/folder commands |
+| 🖥️ App Control | Launch, terminate, and type into any Windows application |
+| 🔊 Volume & Audio | Set level, mute/unmute via Windows Core Audio API |
+| 🌐 Web Search | Real-time DuckDuckGo search results |
+| 📁 File Management | Create files/folders, including on Desktop |
+| 📋 Clipboard | Read and write system clipboard |
+| 💡 Brightness | Screen brightness control via `screen-brightness-control` |
+| 🔒 System Actions | Lock screen, show desktop, task manager, virtual desktops |
+| 📊 System Info | CPU, RAM, battery, Wi-Fi, IP address, running processes |
+| 🔔 Notifications | Windows 10/11 toast notifications |
+| ⌨️ Keyboard Shortcuts | Hotkeys and system keyboard shortcuts |
+
+---
 
 ## 📂 Project Structure
-- `backend/wake_word/` - Controls microphone streams and neural inference for the wake word.
-- `backend/voice/` - Handles the Whispers STT engine and Edge-TTS voice synthesis.
-- `backend/nlp/` - (WIP) The brains of the operation. Intent mapping and entity extraction.
-- `backend/commands/` - (WIP) Desktop automation, app launching, and system control.
-- `frontend/` - (WIP) PyQt6 powered transparent HUD and waveform visualizations.
+
+```
+J.A.R.V.I.S/
+├── main.py                      # Entry point — boots all systems
+├── config.py                    # All settings: model, voice, API keys, wake word path
+├── models/
+│   └── zye_triks.onnx           # Custom-trained wake word model
+├── backend/
+│   ├── wake_word/
+│   │   ├── detector.py          # openWakeWord inference engine
+│   │   └── listener.py          # Mic stream, VAD, conversation loop
+│   ├── voice/
+│   │   ├── stt.py               # Whisper speech-to-text
+│   │   └── tts.py               # Edge-TTS voice synthesis
+│   ├── nlp/
+│   │   └── agent.py             # Groq LLM brain + 29 tool definitions + fast-track layer
+│   └── commands/
+│       ├── audio_control.py     # Volume, mute via pycaw
+│       ├── display.py           # Brightness control
+│       ├── file_manager.py      # File/folder create, delete, move
+│       ├── clipboard.py         # Clipboard read/write
+│       ├── system_info.py       # CPU, RAM, battery, Wi-Fi
+│       ├── network.py           # Wi-Fi and IP control
+│       ├── notifications.py     # Windows toast notifications
+│       ├── keyboard_shortcuts.py# System hotkeys
+│       ├── window_manager.py    # App window focus/close
+│       └── system_control.py    # Shutdown, sleep, reboot
+├── test_wake_word.py            # Standalone wake word tester
+└── requirements.txt
+```
+
+---
 
 ## 🚀 Getting Started
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/J.A.R.V.I.S.git
-   cd J.A.R.V.I.S
-   ```
+### 1. Clone the repository
+```bash
+git clone https://github.com/yourusername/J.A.R.V.I.S.git
+cd J.A.R.V.I.S
+```
 
-2. **Install Dependencies**
-   It's highly recommended to use a virtual environment.
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
 
-3. **Configure Environment**
-   Rename or create a `.env` file in the root directory for your third-party API Keys (NewsAPI, OpenWeather, etc.). See `config.py` for variables.
+### 3. Configure Environment
+Create a `.env` file in the root directory:
+```env
+GROQ_API_KEY=your_groq_api_key_here
+OPENWEATHERMAP_API_KEY=your_key_here
+NEWS_API_KEY=your_key_here
+```
 
-4. **Boot up JARVIS**
-   ```bash
-   python main.py
-   ```
+### 4. Add your Wake Word Model
+Place your custom `.onnx` wake word model inside the `models/` folder and update `config.py`:
+```python
+WAKE_WORD_NAME = os.path.join(BASE_DIR, "models", "your_model.onnx")
+```
+
+### 5. Boot up JARVIS
+```bash
+python main.py
+```
+
+### 6. Test Wake Word Only
+```bash
+python test_wake_word.py
+```
 
 ---
-*Created as a modular project to bring the Marvel Cinematic Universe to the desktop.*
+
+## ⚙️ Architecture: Hybrid Intent System
+
+JARVIS uses a two-layer processing system for maximum speed:
+
+```
+Voice Input
+    │
+    ▼
+Fast-Track Layer (Regex — <50ms)
+  ├─ "set volume to 40"     → Direct hardware call, instant response
+  ├─ "create folder X"      → Direct OS call, instant response
+  └─ "close terminal"       → Direct window close, instant response
+    │
+    ▼ (complex/unknown commands only)
+Groq LLM Brain (llama-3.3-70b-versatile)
+  └─ Full tool calling with 29 registered tools
+```
+
+---
+
+## 🗣️ Example Commands
+
+- *"Set volume to 60"*
+- *"Open Notepad and type hello"*
+- *"What's the latest news about AI?"*
+- *"Create a folder called Project X on my desktop"*
+- *"What's my battery percentage?"*
+- *"Lock the screen"*
+- *"Kill Spotify"*
+- *"Search for the weather in Karachi"*
+
+---
+
+## 🔧 Configuration (`config.py`)
+
+| Setting | Default | Description |
+|---|---|---|
+| `LLM_MODEL` | `llama-3.3-70b-versatile` | Groq model for tool calling |
+| `WAKE_WORD_NAME` | `models/zye_triks.onnx` | Path to custom wake word model |
+| `WAKE_WORD_SENSITIVITY` | `0.5` | Detection threshold (0.0–1.0) |
+| `WHISPER_MODEL_SIZE` | `small.en` | Whisper model size |
+| `TTS_VOICE` | `en-GB-RyanNeural` | Edge-TTS voice |
+| `CONVERSATION_TIMEOUT` | `10` | Seconds to wait after speaking |
+
+---
+
+*Built to bring the Marvel Cinematic Universe to the desktop — one tool call at a time.*
