@@ -6,19 +6,11 @@ logger = logging.getLogger("JARVIS.AudioControl")
 def _get_volume_interface():
     """
     Gets the Windows Core Audio API volume interface via pycaw.
-
-    Why pycaw? Windows doesn't expose volume control through any simple command.
-    We have to go through COM (Component Object Model) — the low-level interface
-    that Windows apps use to talk to each other. pycaw wraps this so we don't
-    have to write C++ code to change the volume.
+    Uses AudioDevice.EndpointVolume — the correct API for pycaw >= 0.6.
     """
-    from ctypes import cast, POINTER
-    from comtypes import CLSCTX_ALL
-    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-
-    devices = AudioUtilities.GetSpeakers()
-    interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-    return cast(interface, POINTER(IAudioEndpointVolume))
+    from pycaw.pycaw import AudioUtilities
+    device = AudioUtilities.GetSpeakers()
+    return device.EndpointVolume
 
 
 def set_volume(level: int) -> bool:

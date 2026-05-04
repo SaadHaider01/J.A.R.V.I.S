@@ -47,10 +47,8 @@ class MicrophoneListener:
         """Streams raw mic bytes into a queue for the Wake Word detector."""
         if self.ignore_mic:
             return
-        # Convert float32 [-1.0, 1.0] to int16 [-32768, 32767] for openWakeWord
-        # Using 32767 and clipping to prevent OverflowError
-        audio_int16 = (np.clip(indata.copy().flatten(), -1, 1) * 32767).astype(np.int16)
-        self.audio_queue.put(audio_int16)
+        # Stream is dtype='int16' — pass directly to openWakeWord (no conversion needed)
+        self.audio_queue.put(indata.copy().flatten())
 
     def _record_with_vad(self) -> np.ndarray:
         """
