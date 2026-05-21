@@ -3,13 +3,50 @@ import numpy as np
 import queue
 import logging
 import collections
-from config import CONVERSATION_TIMEOUT, WAKE_WORD_NAME
+import random
+import subprocess
+import time
+import webbrowser
+from config import CONVERSATION_TIMEOUT, WAKE_WORD_NAME, DEMO_MODE
 from backend.wake_word.detector import WakeWordDetector
 from backend.voice.tts import speak
 from backend.voice.stt import SpeechToText
 from backend.nlp.agent import JarvisAgent
 
 logger = logging.getLogger("JARVIS.Listener")
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DEMO MODE helper
+# Opens browser → Notepad → CMD with a natural 0.5–1 s stagger.
+# Called by listen_for_wake_word() when DEMO_MODE=True in config.py.
+# ───────────────────────────────────────────────────────────────────────────────
+
+def _run_demo_sequence():
+    """Demo: browser → Notepad → CMD with staggered delays."""
+    logger.info("[DEMO] Starting demo sequence...")
+    # NOTE: No speak() here — TTS is non-blocking and its audio would
+    # echo back into the mic after ignore_mic=False, re-triggering the
+    # wake word in a cascade loop.
+
+    # 1. Browser
+    logger.info("[DEMO] Opening browser...")
+    webbrowser.open("https://www.google.com")
+
+    # 2. Notepad
+    delay = random.uniform(0.5, 1.0)
+    time.sleep(delay)
+    logger.info(f"[DEMO] (+{delay:.2f}s) Opening Notepad...")
+    subprocess.Popen(["notepad.exe"])
+
+    # 3. CMD — CREATE_NEW_CONSOLE ensures it gets its own visible window
+    # and taskbar entry instead of inheriting the parent JARVIS console.
+    delay = random.uniform(0.5, 1.0)
+    time.sleep(delay)
+    logger.info(f"[DEMO] (+{delay:.2f}s) Opening Command Prompt...")
+    subprocess.Popen(["cmd.exe"], creationflags=subprocess.CREATE_NEW_CONSOLE)
+
+    logger.info("[DEMO] Sequence complete. Resuming wake-word detection.")
+
 
 # Words Whisper hallucinates when it hears silence
 SILENCE_PHRASES = {
@@ -31,6 +68,17 @@ MAX_RECORDING_S = 10            # Hard ceiling: never record more than 10s
 SILENCE_CHUNKS_TO_STOP = int(1500 / CHUNK_DURATION_MS)  # 1.5s of silence = 50 chunks
 
 
+# Phrases that activate / deactivate demo mode at runtime
+_DEMO_ON_PHRASES  = {"activate demo mode", "enable demo mode", "start demo mode", "demo mode on"}
+_DEMO_OFF_PHRASES = {"deactivate demo mode", "disable demo mode", "stop demo mode", "demo mode off"}
+
+# Seconds after a demo run during which wake word re-triggers are suppressed.
+# The openWakeWord model keeps an internal rolling activation window that
+# doesn't clear when audio stops, so false positives fire the instant the mic
+# reopens. A timestamp guard is the only reliable way to block them.
+DEMO_RETRIGGER_GUARD_S = 8
+
+
 class MicrophoneListener:
     def __init__(self):
         self.sample_rate = SAMPLE_RATE
@@ -42,6 +90,10 @@ class MicrophoneListener:
         self.agent = JarvisAgent()
         self.is_listening = False
         self.ignore_mic = False  # Safety lock: prevents JARVIS from hearing himself
+        # Runtime demo-mode flag — toggled by voice command, not a restart
+        self.demo_mode = DEMO_MODE
+        # Timestamp of the last completed demo run (0 = never ran)
+        self._demo_last_run: float = 0.0
 
     def audio_callback(self, indata, frames, time, status):
         """Streams raw mic bytes into a queue for the Wake Word detector."""
@@ -137,8 +189,38 @@ class MicrophoneListener:
                 audio_chunk = self.audio_queue.get()
 
                 if self.detector.process_audio(audio_chunk):
+
+                    # ── Timestamp guard: suppress re-triggers after a demo ───────
+                    # The detector's internal rolling window keeps stale signal
+                    # even when the mic is off, causing instant false positives
+                    # the moment ignore_mic goes False. We skip any trigger that
+                    # fires within DEMO_RETRIGGER_GUARD_S of the last demo run.
+                    if self.demo_mode and (time.time() - self._demo_last_run) < DEMO_RETRIGGER_GUARD_S:
+                        logger.debug(
+                            f"[DEMO] Re-trigger suppressed "
+                            f"({time.time() - self._demo_last_run:.1f}s < {DEMO_RETRIGGER_GUARD_S}s guard)."
+                        )
+                        continue
+                    # ───────────────────────────────────────────────────────
+
                     logger.info("Wake word detected! Entering conversation mode.")
                     self.ignore_mic = True
+
+                    # ── DEMO MODE: skip STT/agent, just open the 3 apps ───────────
+                    if self.demo_mode:
+                        _run_demo_sequence()
+                        # Record the finish time so the timestamp guard above
+                        # can block the detector's false-positive re-triggers.
+                        self._demo_last_run = time.time()
+                        # Brief drain then re-open mic; the timestamp guard
+                        # handles the rest — no long sleep needed here.
+                        while not self.audio_queue.empty():
+                            self.audio_queue.get()
+                        self.ignore_mic = False
+                        logger.info("[DEMO] Mic re-enabled. Re-trigger guard active for "
+                                    f"{DEMO_RETRIGGER_GUARD_S}s.")
+                        continue
+                    # ───────────────────────────────────────────────────────
 
                     in_conversation = True
                     while in_conversation:
@@ -151,6 +233,9 @@ class MicrophoneListener:
                         logger.info(f"User said: '{command_text}'")
 
                         clean = command_text.lower().strip()
+                        # Strip trailing punctuation Whisper commonly adds
+                        # e.g. "activate demo mode." → "activate demo mode"
+                        clean_nopunct = clean.rstrip(".,!?;:")
 
                         # ── Check for silence or exit command ──────────────
                         if clean in SILENCE_PHRASES or not clean:
@@ -158,6 +243,29 @@ class MicrophoneListener:
                             speak("Standing by.")
                             in_conversation = False
                             continue
+
+                        # ── Demo mode toggle (intercepted before the agent) ─
+                        # Match exact phrase OR substring so Whisper variants
+                        # like "activate demo mode, please" are still caught.
+                        _demo_on  = (clean_nopunct in _DEMO_ON_PHRASES  or
+                                     any(p in clean_nopunct for p in _DEMO_ON_PHRASES))
+                        _demo_off = (clean_nopunct in _DEMO_OFF_PHRASES or
+                                     any(p in clean_nopunct for p in _DEMO_OFF_PHRASES))
+
+                        if _demo_on:
+                            self.demo_mode = True
+                            logger.info(f"[DEMO] Demo mode ENABLED by voice command. (heard: '{clean}')")
+                            speak("Demo mode activated. I'll open browser, Notepad, and Command Prompt on the next wake word.")
+                            in_conversation = False
+                            continue
+
+                        if _demo_off:
+                            self.demo_mode = False
+                            logger.info(f"[DEMO] Demo mode DISABLED by voice command. (heard: '{clean}')")
+                            speak("Demo mode deactivated. Resuming normal command mode.")
+                            in_conversation = False
+                            continue
+                        # ───────────────────────────────────────────────────
 
                         # ── Hand ALL commands to the Agent Brain ───────────
                         logger.info("Routing to Agent Brain...")
@@ -170,7 +278,7 @@ class MicrophoneListener:
 
                     # ── Return to Wake Word detection ──────────────────────
                     self.ignore_mic = False
-                    logger.info("Resuming wake word detection. Waiting for 'Hey Mycroft'...")
+                    logger.info(f"Resuming wake word detection. Waiting for '{ww_display}'...")
 
     def stop(self):
         self.is_listening = False

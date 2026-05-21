@@ -27,5 +27,10 @@ CONVERSATION_TIMEOUT = 10 # Number of seconds to leave the mic open after speaki
 # General Settings
 DEBUG = True
 
+# ── Demo Mode ─────────────────────────────────────────────────────────────────
+# Default is False (normal mode). Say "activate demo mode" after the wake word
+# to enable at runtime, or "deactivate demo mode" to return to normal.
+DEMO_MODE = False
+
 # Browser Automation Paths
 PLAYWRIGHT_BRAVE_PATH = r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"

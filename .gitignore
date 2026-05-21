@@ -66,3 +66,4 @@ temp_audio/
 walkthrough.md
 backend/wake_word/detector.py
 models/hey_jarvis.tflite
+completed_features.md
