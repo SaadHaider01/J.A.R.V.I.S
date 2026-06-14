@@ -100,9 +100,12 @@ TOOLS = [
         "function": {
             "name": "web_search",
             "description": (
-                "Searches the internet for real-time, live information. Use this for "
-                "questions about current events, news, weather, sports scores, stock prices, "
-                "or anything that requires up-to-date information beyond your training data."
+                "Searches the internet and returns a SPOKEN verbal answer to the user. "
+                "Use this for ANY question that requires current, live, or real-time information: "
+                "weather, temperature, news, sports scores, stock prices, definitions, facts, or "
+                "anything that needs an up-to-date answer beyond your training data. "
+                "The result is READ ALOUD to the user — the browser is NOT opened. "
+                "ALWAYS prefer this over search_google when the user wants an answer spoken back to them."
             ),
             "parameters": {
                 "type": "object",
@@ -230,7 +233,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "search_google",
-            "description": "Opens the browser and performs a Google search for the query.",
+            "description": (
+                "Opens the browser window and performs a visible Google search for the user to SEE. "
+                "Use this ONLY when the user explicitly asks you to 'open Google', 'open a browser', "
+                "'show me results', or 'search Google for X'. "
+                "Do NOT use this to answer questions — it does not speak an answer. "
+                "For any information query (weather, news, facts), use web_search instead."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {"query": {"type": "string"}},
@@ -959,6 +968,78 @@ def execute_tool(tool_name: str, tool_args: dict) -> tuple[str, str]:
     return f"Unknown tool '{tool_name}'.", "I encountered an unknown command."
 
 
+def parse_raw_args(leftover: str, tool_name: str) -> dict:
+    """
+    Parses arguments from a raw trailing string in an LLM tool call fallback.
+    
+    WHAT PROBLEM THIS SOLVES:
+    If the LLM outputs plain text instead of structured JSON tool calls (e.g.
+    "function web_search query weather today" or "function launch_application Notepad"),
+    the arguments are not valid JSON. Passing an empty dict to the tool results
+    in failed execution (like searching for empty string or launching nothing).
+    This function parses the parameters using multiple strategies (JSON, key-value search,
+    and single-argument positional fallback) so the tool runs with proper values.
+    """
+    leftover = leftover.strip()
+    if not leftover:
+        return {}
+        
+    # Strategy 1: Standard JSON parsing (e.g. {"query": "weather today"})
+    if leftover.startswith("{") and leftover.endswith("}"):
+        try:
+            return json.loads(leftover)
+        except Exception:
+            pass
+
+    # Find the tool in TOOLS to fetch its parameter structure
+    tool_props = {}
+    for t in TOOLS:
+        if t["function"]["name"] == tool_name:
+            tool_props = t["function"]["parameters"].get("properties", {})
+            break
+
+    if not tool_props:
+        return {}
+
+    # Strategy 2: Single-parameter positional fallback
+    # If the tool has exactly one parameter (e.g., web_search has only 'query'),
+    # we can strip a leading parameter name prefix (if present) and treat the
+    # entire rest of the text as the value. This avoids clipping unquoted strings
+    # containing spaces.
+    if len(tool_props) == 1:
+        param_name = list(tool_props.keys())[0]
+        # Regex matches optional param_name followed by optional space/colon/equals
+        pattern = rf'^(?:{param_name}\s*(?::|=)?\s*)?(.*)$'
+        match = re.match(pattern, leftover, re.IGNORECASE | re.DOTALL)
+        if match:
+            val = match.group(1).strip().strip("'\"")
+            if val:
+                return {param_name: val}
+
+    # Strategy 3: Extract explicit key=value or key:value definitions for multi-parameter tools
+    # Matches query="weather today", query: "weather today", query: weather, etc.
+    parsed = {}
+    for prop_name in tool_props.keys():
+        pattern = rf'{prop_name}\s*[:=]\s*(?:"([^"]*)"|\'([^\']*)\'|(\S+))'
+        match = re.search(pattern, leftover, re.IGNORECASE)
+        if match:
+            # Capture the first non-empty group
+            val = match.group(1) or match.group(2) or match.group(3)
+            parsed[prop_name] = val
+
+    if parsed:
+        return parsed
+
+    # Strategy 4: Generic positional fallback (first property in list)
+    if tool_props:
+        first_param = list(tool_props.keys())[0]
+        val = leftover.strip().strip("'\"")
+        if val:
+            return {first_param: val}
+
+    return {}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # THE JARVIS AGENT
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1088,7 +1169,89 @@ class JarvisAgent:
 
                 else:
                     # Pure conversational reply — no tool called
-                    final_reply = response_message.content
+                    # ── Raw Function Call Guard ────────────────────────────────────────
+                    # PROBLEM: Some Groq model checkpoints occasionally return tool calls
+                    # as raw text in the `content` field instead of the structured
+                    # `tool_calls` JSON list. When this happens, `tool_calls` is None
+                    # and we fall here. Without the guard below, the raw syntax like:
+                    #   "<function=web_search>{"query": "weather today"}</function>"
+                    # gets passed directly to TTS and spoken word-for-word.
+                    #
+                    # DETECTION: We scan the content for patterns matching the two
+                    # common broken formats:
+                    #   1) <function=NAME>{...}</function>   — Groq's broken XML style
+                    #   2) <function=NAME{...}>              — Compact bracket style
+                    # If found, we extract the tool name and args, run execute_tool()
+                    # ourselves, and re-route through the normal Round 2 pipeline.
+                    content_text = response_message.content or ""
+                    
+                    # Log raw content at debug level so we can inspect exact format issues
+                    logger.debug(f"Raw LLM content (no tool_calls): {repr(content_text[:300])}")
+                    
+                    # ── Raw Function Call Guard ────────────────────────────────────────
+                    # PROBLEM: Groq occasionally returns tool calls as raw text in the
+                    # `content` field. Without interception, this raw syntax gets spoken
+                    # as-is by TTS (e.g., "function web_search query weather today").
+                    #
+                    # We detect 3 known broken formats:
+                    #   Format A: <function=NAME>{"key": "val"}</function>  (XML style)
+                    #   Format B: <function=NAME{"key": "val"}>             (bracket style)
+                    #   Format C: Anything starting with "function " then a known tool name
+                    #             (plain-text fallback format, no JSON args)
+                    
+                    raw_tool_name = None
+                    raw_args = {}
+                    
+                    # Format A & B — angle bracket variants
+                    bracket_match = re.search(
+                        r'<function=(\w+)[\s>]([^<]*?)(?:</function>|>)',
+                        content_text,
+                        re.DOTALL
+                    )
+                    if bracket_match:
+                        raw_tool_name = bracket_match.group(1).strip()
+                        raw_args_str  = bracket_match.group(2).strip()
+                        raw_args = parse_raw_args(raw_args_str, raw_tool_name)
+                    
+                    # Format C — plain-text "function TOOLNAME key value ..."
+                    # This is the exact format the user is hearing spoken aloud.
+                    if not raw_tool_name:
+                        plain_match = re.match(r'function\s+(\w+)\s*(.*)', content_text.strip(), re.DOTALL)
+                        if plain_match:
+                            candidate = plain_match.group(1).strip()
+                            # Only intercept if it matches a known tool name
+                            all_known = {t["function"]["name"] for t in TOOLS}
+                            if candidate in all_known:
+                                raw_tool_name = candidate
+                                leftover = plain_match.group(2).strip()
+                                raw_args = parse_raw_args(leftover, raw_tool_name)
+                    
+                    if raw_tool_name:
+                        logger.warning(
+                            f"Intercepted raw function call in content for '{raw_tool_name}' args={raw_args}"
+                        )
+                        tool_result, instant_reply = execute_tool(raw_tool_name, raw_args)
+                        logger.info(f"Manually executed intercepted tool '{raw_tool_name}': {tool_result}")
+
+                        if raw_tool_name not in _ACTION_ONLY_TOOLS:
+                            # Needs Round 2 — feed tool result back to LLM for a spoken summary
+                            messages.append({"role": "assistant", "content": content_text})
+                            messages.append({
+                                "role": "tool",
+                                "tool_call_id": "manual_intercept",
+                                "content": tool_result,
+                            })
+                            logger.info("Round 2 (manual intercept): LLM summarizing tool output...")
+                            r2 = self.client.chat.completions.create(
+                                messages=messages,
+                                model=self.model,
+                                temperature=0.7,
+                            )
+                            final_reply = r2.choices[0].message.content
+                        else:
+                            final_reply = instant_reply or "Done."
+                    else:
+                        final_reply = content_text
 
                 # Success — clean up any hints and save to memory
                 self._remove_format_hint()

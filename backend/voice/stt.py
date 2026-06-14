@@ -38,8 +38,18 @@ class SpeechToText:
         # Strip leading/trailing silence to avoid hallucinations from quiet segments
         audio_data = self._trim_silence(audio_data)
 
-        if audio_data.size == 0:
-            logger.debug("Audio was empty after silence trim — ignoring.")
+        # Educational Safety Guard:
+        # In a full-duplex system, rapid state transitions or interruptions can result
+        # in extremely short audio recordings (e.g., a tiny fraction of a second).
+        # If the audio contains fewer samples than Whisper's minimum FFT window/hop size,
+        # the resulting Mel spectrogram will have 0 frames, causing PyTorch to crash
+        # with: `RuntimeError: cannot reshape tensor of 0 elements`.
+        # We enforce a safe minimum duration of 200ms (3200 samples at 16kHz).
+        if audio_data.size < 3200:
+            logger.warning(
+                f"Audio segment too short after silence trim ({audio_data.size} samples / "
+                f"{audio_data.size / 16000:.3f}s) — discarding to prevent Whisper crash."
+            )
             return ""
 
         result = self.model.transcribe(

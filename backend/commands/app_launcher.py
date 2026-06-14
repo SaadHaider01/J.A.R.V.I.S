@@ -88,7 +88,12 @@ def launch_app(app_name: str) -> bool:
         brave = _get_brave_path()
         if brave:
             logger.info("Launching Brave Browser...")
-            subprocess.Popen([brave])
+            subprocess.Popen(
+                [brave],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True
+            )
             return True
         else:
             logger.warning("Brave not found. Falling back to default browser.")
@@ -131,7 +136,12 @@ def launch_app(app_name: str) -> bool:
         # Requires at least 3 letters to prevent "app" matching everything
         if len(app_name) > 3 and (app_name in installed_name or installed_name in app_name):
             logger.info(f"Fuzzy matched '{app_name}' to installed app '{installed_name}'. Launching!")
-            subprocess.Popen(["explorer.exe", f"shell:AppsFolder\\{appid}"])
+            subprocess.Popen(
+                ["explorer.exe", f"shell:AppsFolder\\{appid}"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True
+            )
             return True
 
     # 4. Attempt to generically start it as a fallback
@@ -148,7 +158,12 @@ def open_url_in_browser(url: str, prefer_brave: bool = True) -> str:
         brave = _get_brave_path()
         if brave:
             logger.info("Opening URL in Brave: %s", url)
-            subprocess.Popen([brave, url])
+            subprocess.Popen(
+                [brave, url],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True
+            )
             return f"Opened in Brave: {url}"
 
     logger.info("Opening URL in default browser: %s", url)
