@@ -2,7 +2,7 @@ import os
 import platform
 import logging
 
-logger = logging.getLogger("JARVIS.System")
+logger = logging.getLogger("ZYTRIX.System")
 
 def shutdown_pc():
     """

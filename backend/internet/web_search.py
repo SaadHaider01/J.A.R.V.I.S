@@ -2,7 +2,7 @@ import webbrowser
 import urllib.parse
 import logging
 
-logger = logging.getLogger("JARVIS.WebSearch")
+logger = logging.getLogger("ZYTRIX.WebSearch")
 
 def google_search(query: str):
     """

@@ -1,6 +1,6 @@
 import logging
 
-logger = logging.getLogger("JARVIS.Context")
+logger = logging.getLogger("ZYTRIX.Context")
 
 
 class ConversationalMemory:
@@ -18,12 +18,12 @@ class ConversationalMemory:
         self.max_text_turns = 6  # 6 pairs = 12 messages + system + tool pairs
 
     def add_user_message(self, text: str):
-        """Add what the user said to JARVIS's memory."""
+        """Add what the user said to ZYTRIX's memory."""
         self.history.append({"role": "user", "content": text})
         self._trim_memory()
 
     def add_assistant_message(self, text: str):
-        """Add what JARVIS said back into memory."""
+        """Add what ZYTRIX said back into memory."""
         self.history.append({"role": "assistant", "content": text})
         self._trim_memory()
 

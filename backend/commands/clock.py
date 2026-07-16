@@ -3,7 +3,7 @@ import time
 import logging
 import pyautogui
 
-logger = logging.getLogger("JARVIS.Clock")
+logger = logging.getLogger("ZYTRIX.Clock")
 
 def set_timer(hours: str, minutes: str, seconds: str, label: str = ""):
     """

@@ -1,7 +1,7 @@
 from transformers import pipeline
 import logging
 
-logger = logging.getLogger("JARVIS.Intent")
+logger = logging.getLogger("ZYTRIX.Intent")
 
 class IntentClassifier:
     def __init__(self):
@@ -14,7 +14,7 @@ class IntentClassifier:
         # A lightweight, fast model for CPU inference. 
         self.classifier = pipeline("zero-shot-classification", model="typeform/distilbert-base-uncased-mnli")
         
-        # These are the exact intents (commands) JARVIS is allowed to understand.
+        # These are the exact intents (commands) ZYTRIX is allowed to understand.
         self.candidate_labels = [
             "open application", 
             "get weather", 

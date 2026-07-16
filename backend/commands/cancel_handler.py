@@ -1,7 +1,7 @@
 import logging
 import threading
 
-logger = logging.getLogger("JARVIS.CancelHandler")
+logger = logging.getLogger("ZYTRIX.CancelHandler")
 
 # Global flag protecting long-running macros
 _CANCEL_FLAG = False

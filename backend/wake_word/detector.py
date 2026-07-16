@@ -3,10 +3,10 @@ from openwakeword.model import Model
 import numpy as np
 import logging
 
-logger = logging.getLogger("JARVIS.WakeWord")
+logger = logging.getLogger("ZYTRIX.WakeWord")
 
 class WakeWordDetector:
-    def __init__(self, wake_word="jarvis"):
+    def __init__(self, wake_word="zytrix"):
         """
         Initializes the openwakeword model.
         Available default models: 'hey_mycroft', 'alexa', 'hey_siri', 'timer', 'weather'

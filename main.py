@@ -33,26 +33,26 @@ logging.basicConfig(
     level=logging.DEBUG if DEBUG else logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
-logger = logging.getLogger("JARVIS.Main")
+logger = logging.getLogger("ZYTRIX.Main")
 
 def main():
-    log_event("MAIN", "Initializing JARVIS system cores...")
+    log_event("MAIN", "Initializing ZYTRIX system cores...")
     
     # Initialize the master duplex coordinator
     try:
-        jarvis = DuplexManager()
+        zytrix = DuplexManager()
     except Exception as e:
-        logger.critical(f"Failed to boot JARVIS models: {e}")
+        logger.critical(f"Failed to boot ZYTRIX models: {e}")
         sys.exit(1)
         
     log_event("MAIN", "All systems nominal. Booting threads...")
     
     # Start the continuous stream duplex workers
     try:
-        jarvis.start()
+        zytrix.start()
         
         # Keep the main thread alive while workers process audio in background
-        while not jarvis.shutdown_event.is_set():
+        while not zytrix.shutdown_event.is_set():
             time.sleep(0.5)
             
     except KeyboardInterrupt:
@@ -61,11 +61,11 @@ def main():
         logger.error(f"Critical Runtime Exception: {e}")
     finally:
         # Guarantee safe cleanup of mic streams, threads, and files
-        jarvis.stop()
+        zytrix.stop()
         
         # Print performance diagnostics metrics before exiting
         metrics_tracker.print_diagnostics_report()
-        log_event("MAIN", "JARVIS core is offline. Goodbye.")
+        log_event("MAIN", "ZYTRIX core is offline. Goodbye.")
         sys.exit(0)
 
 if __name__ == "__main__":

@@ -100,7 +100,7 @@ class MetricsTracker:
             avg_tts = (sum(self.tts_startup_times) / len(self.tts_startup_times)) if self.tts_startup_times else 0.0
             
             report = (
-                f"\n==== JARVIS PERFORMANCE DIAGNOSTICS REPORT ====\n"
+                f"\n==== ZYTRIX PERFORMANCE DIAGNOSTICS REPORT ====\n"
                 f" - Avg Barge-In Stop: {avg_interrupt:.1f}ms (Target: <{GOAL_INTERRUPT_DETECTION_MS}ms)\n"
                 f" - Avg Whisper STT:   {avg_stt:.1f}ms\n"
                 f" - Avg TTS Startup:   {avg_tts:.1f}ms\n"

@@ -1,7 +1,7 @@
 import spacy
 import logging
 
-logger = logging.getLogger("JARVIS.Entities")
+logger = logging.getLogger("ZYTRIX.Entities")
 
 class EntityExtractor:
     def __init__(self):

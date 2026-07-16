@@ -11,9 +11,9 @@ from config import CONVERSATION_TIMEOUT, WAKE_WORD_NAME, DEMO_MODE
 from backend.wake_word.detector import WakeWordDetector
 from backend.voice.tts import speak
 from backend.voice.stt import SpeechToText
-from backend.nlp.agent import JarvisAgent
+from backend.nlp.agent import ZytrixAgent
 
-logger = logging.getLogger("JARVIS.Listener")
+logger = logging.getLogger("ZYTRIX.Listener")
 
 # ───────────────────────────────────────────────────────────────────────────────
 # DEMO MODE helper
@@ -39,7 +39,7 @@ def _run_demo_sequence():
     subprocess.Popen(["notepad.exe"])
 
     # 3. CMD — CREATE_NEW_CONSOLE ensures it gets its own visible window
-    # and taskbar entry instead of inheriting the parent JARVIS console.
+    # and taskbar entry instead of inheriting the parent ZYTRIX console.
     delay = random.uniform(0.5, 1.0)
     time.sleep(delay)
     logger.info(f"[DEMO] (+{delay:.2f}s) Opening Command Prompt...")
@@ -87,9 +87,9 @@ class MicrophoneListener:
 
         self.detector = WakeWordDetector(WAKE_WORD_NAME)
         self.stt = SpeechToText()
-        self.agent = JarvisAgent()
+        self.agent = ZytrixAgent()
         self.is_listening = False
-        self.ignore_mic = False  # Safety lock: prevents JARVIS from hearing himself
+        self.ignore_mic = False  # Safety lock: prevents ZYTRIX from hearing himself
         # Runtime demo-mode flag — toggled by voice command, not a restart
         self.demo_mode = DEMO_MODE
         # Timestamp of the last completed demo run (0 = never ran)
@@ -183,7 +183,7 @@ class MicrophoneListener:
             from config import WAKE_WORD_NAME
             import os
             ww_display = os.path.basename(WAKE_WORD_NAME).split('.')[0].replace('_', ' ')
-            logger.info(f"JARVIS is actively listening for '{ww_display}'...")
+            logger.info(f"ZYTRIX is actively listening for '{ww_display}'...")
 
             while self.is_listening:
                 audio_chunk = self.audio_queue.get()

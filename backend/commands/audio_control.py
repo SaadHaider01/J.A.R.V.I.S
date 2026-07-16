@@ -1,6 +1,6 @@
 import logging
 
-logger = logging.getLogger("JARVIS.AudioControl")
+logger = logging.getLogger("ZYTRIX.AudioControl")
 
 
 def _get_volume_interface():

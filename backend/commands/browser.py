@@ -5,7 +5,7 @@ from config import PLAYWRIGHT_BRAVE_PATH
 # We use sync_playwright since the agent loops synchronously
 from playwright.sync_api import sync_playwright, Playwright, Browser, Page
 
-logger = logging.getLogger("JARVIS.Browser")
+logger = logging.getLogger("ZYTRIX.Browser")
 
 # Persistent playwright session globals
 _playwright: Playwright | None = None
@@ -61,6 +61,36 @@ def search_web(query: str) -> bool:
 def search_youtube(query: str) -> bool:
     """Performs a YouTube search using Playwright."""
     return open_browser(f"https://www.youtube.com/results?search_query={query}")
+
+def play_on_youtube(query: str) -> bool:
+    """
+    Searches YouTube for a query and automatically clicks the first video result
+    so playback begins immediately — rather than leaving the user on a results page.
+    """
+    import urllib.parse
+    try:
+        page = _get_page()
+        encoded = urllib.parse.quote_plus(query)
+        logger.info(f"YouTube play: searching for '{query}'...")
+        page.goto(f"https://www.youtube.com/results?search_query={encoded}", wait_until="domcontentloaded")
+
+        # Wait for video thumbnails to appear, then click the first one
+        # The selector targets the first non-ad video result link
+        first_video_selector = "ytd-video-renderer a#thumbnail"
+        try:
+            page.wait_for_selector(first_video_selector, timeout=8000)
+            page.locator(first_video_selector).first.click()
+            logger.info(f"YouTube play: clicked first result for '{query}'.")
+            return True
+        except Exception:
+            # Fallback: navigate directly to the search URL — at least shows results
+            logger.warning("YouTube play: could not click first result. Leaving on search page.")
+            return True
+    except Exception as e:
+        logger.error(f"play_on_youtube failed: {e}")
+        return False
+
+
 
 def click_element(selector: str) -> bool:
     """Plays out a physical click on the specified CSS/XPath selector."""

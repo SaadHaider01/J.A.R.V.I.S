@@ -3,7 +3,7 @@ import logging
 import pyautogui
 import time
 
-logger = logging.getLogger("JARVIS.WindowManager")
+logger = logging.getLogger("ZYTRIX.WindowManager")
 
 def _find_window(app_name: str):
     app_name_lower = app_name.lower()

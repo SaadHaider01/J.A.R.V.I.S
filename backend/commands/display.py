@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("JARVIS.Display")
+logger = logging.getLogger("ZYTRIX.Display")
 
 
 def set_brightness(level: int) -> bool:
@@ -49,7 +49,7 @@ def take_screenshot(filename: str = "") -> str:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"screenshot_{timestamp}.png"
 
-        save_dir = Path.home() / "Pictures" / "JARVIS_Screenshots"
+        save_dir = Path.home() / "Pictures" / "ZYTRIX_Screenshots"
         save_dir.mkdir(parents=True, exist_ok=True)
         save_path = str(save_dir / filename)
 

@@ -46,7 +46,7 @@ def stop_tts(token: str):
     if not token:
         return
         
-    alias = f"jarvis_{token}"
+    alias = f"zytrix_{token}"
     log_event("TTS", f"Requesting stop for active playback token: {token}")
     
     # 1. Graceful volume fade-out
@@ -63,12 +63,14 @@ def stop_tts(token: str):
     ctypes.windll.winmm.mciSendStringW(f"close {alias}", None, 0, None)
     log_event("TTS", f"[TTS STOPPED] Audio stopped and file released for alias: {alias}")
 
-def play_audio_windows_threaded(file_path: str, token: str, session_id: str, state_tracker, assistant_speaking_event):
+def play_audio_windows_threaded(file_path: str, token: str, session_id: str, state_tracker, assistant_speaking_event, post_tts_callback=None):
     """
     Worker thread that runs Windows MCI playback.
     Blocks the playback thread, but is safely interrupted if another thread calls stop_tts().
+    post_tts_callback: optional callable invoked after natural (non-interrupted) TTS completion
+                       to let the DuplexManager set a mic-echo cooldown.
     """
-    alias = f"jarvis_{token}"
+    alias = f"zytrix_{token}"
     
     log_event("TTS", f"Opening MCI audio file under alias: {alias}")
     # 1. Open the MP3 file natively in Windows
@@ -99,15 +101,28 @@ def play_audio_windows_threaded(file_path: str, token: str, session_id: str, sta
     ctypes.windll.winmm.mciSendStringW(f"close {alias}", None, 0, None)
 
     # 4. State updates and file deletion
+    naturally_completed = False
     with _playback_lock:
         global current_playback_token
         # Check if we were the thread that just finished speaking naturally
         if current_playback_token == token:
+            naturally_completed = True
             current_playback_token = None
             if assistant_speaking_event:
                 assistant_speaking_event.clear()
+            # Fire the post-TTS echo cooldown BEFORE transitioning to IDLE.
+            # CRITICAL ORDERING: The cooldown_until timestamp must be set before
+            # the IDLE state is visible to _run_loop. If we transition first,
+            # the run_loop can process wake-word audio in the ~1ms gap before
+            # the callback runs, causing immediate false wake word re-triggers.
+            if post_tts_callback:
+                try:
+                    post_tts_callback()
+                except Exception:
+                    pass
             if state_tracker and state_tracker.get_state() == AssistantState.SPEAKING:
                 state_tracker.transition_to(AssistantState.IDLE)
+
                 
     # Clean up the temporary MP3 file from the disk
     try:
@@ -115,7 +130,7 @@ def play_audio_windows_threaded(file_path: str, token: str, session_id: str, sta
     except Exception as e:
         log_event("TTS", f"Failed to remove temp audio file {file_path}: {e}", level=30)
 
-def speak(text: str, voice: str = TTS_VOICE, session_id: str = None, state_tracker = None, assistant_speaking_event = None, tts_stop_event = None):
+def speak(text: str, voice: str = TTS_VOICE, session_id: str = None, state_tracker = None, assistant_speaking_event = None, tts_stop_event = None, post_tts_callback = None):
     """
     Converts text to speech and schedules playback in a non-blocking background thread.
     Can be called synchronously (fallback) if duplex arguments are omitted.
@@ -171,14 +186,14 @@ def speak(text: str, voice: str = TTS_VOICE, session_id: str = None, state_track
         # We prefix the thread name with 'TTS-Playback-' so the Watchdog can track its status.
         t = threading.Thread(
             target=play_audio_windows_threaded,
-            args=(temp_file.name, playback_token, session_id, state_tracker, assistant_speaking_event),
+            args=(temp_file.name, playback_token, session_id, state_tracker, assistant_speaking_event, post_tts_callback),
             name=f"TTS-Playback-{playback_token}",
             daemon=True
         )
         t.start()
     else:
         # Fallback synchronous playback (for testing scripts or simple mode)
-        alias = "jarvis_sync"
+        alias = "zytrix_sync"
         ctypes.windll.winmm.mciSendStringW(f'open "{temp_file.name}" alias {alias}', None, 0, None)
         ctypes.windll.winmm.mciSendStringW(f'play {alias} wait', None, 0, None)
         ctypes.windll.winmm.mciSendStringW(f'close {alias}', None, 0, None)

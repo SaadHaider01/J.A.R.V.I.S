@@ -1,6 +1,6 @@
 import logging
 
-logger = logging.getLogger("JARVIS.Clipboard")
+logger = logging.getLogger("ZYTRIX.Clipboard")
 
 
 def get_clipboard() -> str:

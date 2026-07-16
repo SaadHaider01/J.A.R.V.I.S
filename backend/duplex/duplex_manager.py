@@ -30,7 +30,7 @@ import sounddevice as sd
 from config import WAKE_WORD_NAME, DEMO_MODE, TTS_VOICE
 from backend.wake_word.detector import WakeWordDetector
 from backend.voice.stt import SpeechToText
-from backend.nlp.agent import JarvisAgent
+from backend.nlp.agent import ZytrixAgent
 from backend.voice import tts
 from backend.duplex.constants import (
     SAMPLE_RATE,
@@ -79,7 +79,7 @@ class DuplexManager:
         # Core Models (VAD, STT, Agent)
         self.ww_detector = WakeWordDetector(WAKE_WORD_NAME)
         self.stt = SpeechToText()
-        self.agent = JarvisAgent()
+        self.agent = ZytrixAgent()
         
         # Demo mode tracking
         self.demo_mode = DEMO_MODE
@@ -165,6 +165,24 @@ class DuplexManager:
             tts.stop_tts(token)
             self.tts_stop_event.set()
             self.assistant_speaking_event.clear()
+
+    def _post_tts_echo_cooldown(self):
+        """
+        Called by the TTS playback thread after natural (non-interrupted) speech ends.
+
+        WHY THIS EXISTS:
+        After ZYTRIX finishes speaking, the room still contains speaker echo for
+        ~1-2 seconds. When the state transitions SPEAKING → IDLE, the wake word
+        detector immediately starts processing audio. The echo in the room contains
+        enough energy to score a false wake word hit at confidence 0.89-0.98,
+        triggering rapid IDLE → LISTENING → IDLE loop spam.
+
+        FIX: Set a 1.5s cooldown_until window after natural TTS completion so all
+        audio chunks are discarded while the speaker output decays in the room.
+        """
+        POST_TTS_COOLDOWN_S = 1.5
+        self.cooldown_until = time.time() + POST_TTS_COOLDOWN_S
+        log_event("TTS", f"Post-TTS echo cooldown set for {POST_TTS_COOLDOWN_S}s.")
 
     def _run_loop(self):
         """The main duplex event consumer loop."""
@@ -530,13 +548,17 @@ class DuplexManager:
                 return
 
             # Step 3: Speak Response (Non-blocking)
+            # post_tts_callback suppresses wake word re-triggers from TTS echo:
+            # the speaker output lingers in the room for ~1.5s after playback ends
+            # and would otherwise immediately fire a false wake word detection.
             tts.speak(
                 text=reply,
                 voice=TTS_VOICE,
                 session_id=session_id,
                 state_tracker=self.state_tracker,
                 assistant_speaking_event=self.assistant_speaking_event,
-                tts_stop_event=self.tts_stop_event
+                tts_stop_event=self.tts_stop_event,
+                post_tts_callback=self._post_tts_echo_cooldown
             )
         except Exception as e:
             log_event("PIPELINE", f"Critical crash inside speech pipeline worker thread: {e}", level=40)

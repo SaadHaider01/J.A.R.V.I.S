@@ -1,6 +1,6 @@
 import logging
 
-logger = logging.getLogger("JARVIS.SystemInfo")
+logger = logging.getLogger("ZYTRIX.SystemInfo")
 
 
 def get_battery_status() -> dict:

@@ -3,7 +3,7 @@ import time
 import logging
 import pyautogui
 
-logger = logging.getLogger("JARVIS.Camera")
+logger = logging.getLogger("ZYTRIX.Camera")
 
 def take_selfie():
     """

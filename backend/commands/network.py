@@ -2,7 +2,7 @@ import subprocess
 import socket
 import logging
 
-logger = logging.getLogger("JARVIS.Network")
+logger = logging.getLogger("ZYTRIX.Network")
 
 
 def _run_netsh(args: list[str]) -> str:
@@ -106,7 +106,7 @@ def connect_wifi(ssid: str, password: str = "") -> bool:
     </security></MSM>
 </WLANProfile>"""
             # Write profile to temp file, add it, connect, clean up
-            profile_path = os.path.join(tempfile.gettempdir(), f"jarvis_wifi_{ssid}.xml")
+            profile_path = os.path.join(tempfile.gettempdir(), f"zytrix_wifi_{ssid}.xml")
             with open(profile_path, "w") as f:
                 f.write(profile_xml)
 

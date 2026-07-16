@@ -5,7 +5,7 @@ import webbrowser
 import urllib.parse
 import re
 
-logger = logging.getLogger("JARVIS.AppLauncher")
+logger = logging.getLogger("ZYTRIX.AppLauncher")
 
 # Brave executable paths to try
 BRAVE_PATHS = [

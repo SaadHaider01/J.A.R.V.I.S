@@ -1,6 +1,6 @@
 import logging
 
-logger = logging.getLogger("JARVIS.Notifications")
+logger = logging.getLogger("ZYTRIX.Notifications")
 
 
 def send_notification(title: str, message: str, duration: int = 5) -> bool:
@@ -18,7 +18,7 @@ def send_notification(title: str, message: str, duration: int = 5) -> bool:
             title,
             message,
             duration=duration,
-            threaded=True  # Non-blocking so JARVIS doesn't freeze
+            threaded=True  # Non-blocking so ZYTRIX doesn't freeze
         )
         logger.info(f"Notification sent: '{title}'")
         return True

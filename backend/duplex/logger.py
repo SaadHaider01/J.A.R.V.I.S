@@ -27,7 +27,7 @@ logging.basicConfig(
 )
 
 # Base logger for duplex operations
-logger = logging.getLogger("JARVIS.Duplex")
+logger = logging.getLogger("ZYTRIX.Duplex")
 
 def log_event(component: str, message: str, level: int = logging.INFO):
     """

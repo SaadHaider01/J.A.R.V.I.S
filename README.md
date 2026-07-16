@@ -6,7 +6,7 @@
 [![Status: Operational](https://img.shields.io/badge/Status-Operational-brightgreen.svg)]()
 [![LLM](https://img.shields.io/badge/LLM-Llama%203.3%2070B-purple.svg)](https://groq.com)
 
-JARVIS is a fully operational, modular AI desktop assistant built in Python. It listens for a custom-trained wake word, understands natural language commands, and physically controls your Windows PC using 29+ tools — all with millisecond-level response for hardware commands.
+ZYTRIX is a fully operational, modular AI desktop assistant built in Python. It listens for a custom-trained wake word, understands natural language commands, and physically controls your Windows PC using 29+ tools — all with millisecond-level response for hardware commands.
 
 ---
 
@@ -93,7 +93,7 @@ Place your custom `.onnx` wake word model inside the `models/` folder and update
 WAKE_WORD_NAME = os.path.join(BASE_DIR, "models", "your_model.onnx")
 ```
 
-### 5. Boot up JARVIS
+### 5. Boot up ZYTRIX
 ```bash
 python main.py
 ```
@@ -107,7 +107,7 @@ python test_wake_word.py
 
 ## ⚙️ Architecture: Hybrid Intent System
 
-JARVIS uses a two-layer processing system for maximum speed:
+ZYTRIX uses a two-layer processing system for maximum speed:
 
 ```
 Voice Input

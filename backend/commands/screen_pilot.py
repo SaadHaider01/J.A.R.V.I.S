@@ -5,7 +5,7 @@ import logging
 import os
 import time
 
-logger = logging.getLogger("JARVIS.ScreenPilot")
+logger = logging.getLogger("ZYTRIX.ScreenPilot")
 
 # Base folder for UI templates
 TEMPLATES_FOLDER = os.path.join(os.getcwd(), "frontend", "assets", "templates")

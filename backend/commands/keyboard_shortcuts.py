@@ -2,7 +2,7 @@ import logging
 import time
 import pyautogui
 
-logger = logging.getLogger("JARVIS.Shortcuts")
+logger = logging.getLogger("ZYTRIX.Shortcuts")
 
 # Disable pyautogui's failsafe pause for instant execution
 pyautogui.PAUSE = 0.1

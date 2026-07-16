@@ -1,5 +1,5 @@
 """
-demo_mode.py  ──  JARVIS Temporary Demo Mode
+demo_mode.py  ──  ZYTRIX Temporary Demo Mode
 =============================================
 Run this instead of main.py when you want to record a demo.
 
@@ -32,7 +32,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
-logger = logging.getLogger("JARVIS.Demo")
+logger = logging.getLogger("ZYTRIX.Demo")
 
 # ── Audio settings (must match the detector's expected rate) ────────────────
 SAMPLE_RATE = 16_000
@@ -81,7 +81,7 @@ def main():
         os.path.basename(WAKE_WORD_NAME).split(".")[0].replace("_", " ").title()
     )
 
-    logger.info(f"JARVIS Demo Mode — listening for '{ww_display}'")
+    logger.info(f"ZYTRIX Demo Mode — listening for '{ww_display}'")
     logger.info("Press Ctrl+C to exit.\n")
 
     detector   = WakeWordDetector(WAKE_WORD_NAME)

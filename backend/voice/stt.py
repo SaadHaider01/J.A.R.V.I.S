@@ -3,14 +3,14 @@ import numpy as np
 from config import WHISPER_MODEL_SIZE
 import logging
 
-logger = logging.getLogger("JARVIS.STT")
+logger = logging.getLogger("ZYTRIX.STT")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Vocabulary hint primes Whisper to expect JARVIS-specific words.
+# Vocabulary hint primes Whisper to expect ZYTRIX-specific words.
 # This drastically reduces misrecognition of app names, commands, etc.
 # ─────────────────────────────────────────────────────────────────────────────
 _INITIAL_PROMPT = (
-    "JARVIS assistant commands: open Brave, open Notepad, open WhatsApp, open Calculator, "
+    "ZYTRIX assistant commands: open Brave, open Notepad, open WhatsApp, open Calculator, "
     "open Spotify, open YouTube, search for, play music, shut down, sleep, "
     "terminate, close, type, write, Google, Spider-Man, Iron Man, weather, "
     "news, volume up, volume down, screenshot, open file explorer."
@@ -28,7 +28,7 @@ class SpeechToText:
         """
         Takes raw audio data (numpy array) and translates it to text.
         - Language is locked to English to avoid misdetection with accented speech.
-        - initial_prompt seeds Whisper with JARVIS-specific vocabulary.
+        - initial_prompt seeds Whisper with ZYTRIX-specific vocabulary.
         - condition_on_previous_text=False prevents hallucination chaining.
         - Silence is stripped from both ends before transcription.
         """
@@ -56,7 +56,7 @@ class SpeechToText:
             audio_data,
             fp16=False,
             language="en",                       # Lock to English — prevents language misdetection
-            initial_prompt=_INITIAL_PROMPT,      # Seed with JARVIS vocabulary
+            initial_prompt=_INITIAL_PROMPT,      # Seed with ZYTRIX vocabulary
             condition_on_previous_text=False,    # Prevent hallucination chaining
         )
         return result["text"].strip()

@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 import logging
 
-logger = logging.getLogger("JARVIS.FileManager")
+logger = logging.getLogger("ZYTRIX.FileManager")
 
 
 def create_file(file_path: str, content: str = "") -> bool:

@@ -2,12 +2,12 @@ import requests
 from config import NEWS_API_KEY
 import logging
 
-logger = logging.getLogger("JARVIS.News")
+logger = logging.getLogger("ZYTRIX.News")
 
 def get_latest_news() -> str:
     """
     Similar to the Weather module, this uses 'requests' to hit the NewsAPI.
-    It deliberately asks for only the top 3 headlines (pageSize=3) so JARVIS doesn't talk forever.
+    It deliberately asks for only the top 3 headlines (pageSize=3) so ZYTRIX doesn't talk forever.
     """
     if not NEWS_API_KEY or NEWS_API_KEY == "your_news_api_key_here":
         return "News API key is missing in the environment variables."

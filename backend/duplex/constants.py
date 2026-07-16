@@ -72,18 +72,19 @@ INTERRUPT_ENERGY_THRESHOLD = 0.02
 INTERRUPT_COOLDOWN_S = 0.5
 
 # Delay before THINKING-state interruption monitoring begins (seconds).
-# The user's own voice decays in the room for ~1.0–1.5s after they stop speaking.
-# Monitoring before this window elapses risks self-cancellation from tail-decay echo
-# — the user's own ending breath or room reverb hits the INTERRUPT_ENERGY_THRESHOLD
-# and instantly aborts the pipeline they just triggered.
-THINKING_INTERRUPT_GUARD_S = 1.5
+# The user's own voice decays in the room for ~0.5–0.8s after they stop speaking.
+# 0.8s is enough to let tail-decay settle without creating a dead zone on fast
+# Groq responses that complete in under 1.5s.
+THINKING_INTERRUPT_GUARD_S = 0.8
 
 # Soft interrupt timing in milliseconds.
-# Rather than interrupting on the first loud chunk (which could be a cough or click),
-# we require user speech to be detected consistently for at least 150ms.
-# 150ms = 5 consecutive 30ms chunks.
-SOFT_INTERRUPT_MS = 150
-SOFT_INTERRUPT_CHUNKS = int(SOFT_INTERRUPT_MS / CHUNK_DURATION_MS)
+# Require consistent speech for 90ms (3 consecutive 30ms chunks) before triggering.
+# WHY REDUCED FROM 150ms:
+# Short commands like "stop", "hey", or "wait" are 80–100ms of peak energy.
+# At 150ms (5 chunks) those were being missed. 3 chunks still rejects single
+# pop/click transients while catching real speech reliably.
+SOFT_INTERRUPT_MS = 90
+SOFT_INTERRUPT_CHUNKS = int(SOFT_INTERRUPT_MS / CHUNK_DURATION_MS)  # = 3 chunks
 
 # Auto-stop recording (VAD) timing.
 # Stop recording user input after 1.5 seconds of silence (50 chunks of 30ms).

@@ -9,6 +9,7 @@ from groq import Groq
 from duckduckgo_search import DDGS
 from config import GROQ_API_KEY, LLM_MODEL
 from backend.memory.context_manager import ConversationalMemory
+from backend.memory import MemoryManager
 from backend.commands.app_launcher import launch_app
 from backend.commands.system_control import sleep_pc, shutdown_pc
 from backend.commands.camera import take_selfie, record_video
@@ -42,7 +43,7 @@ from backend.commands.keyboard_shortcuts import (
     open_task_manager, virtual_desktop_new, virtual_desktop_switch
 )
 
-logger = logging.getLogger("JARVIS.Agent")
+logger = logging.getLogger("ZYTRIX.Agent")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TOOL DEFINITIONS
@@ -66,7 +67,7 @@ TOOLS = [
                         "description": (
                             "The name of the app to open. You can provide any common app name "
                             "(e.g., 'WhatsApp', 'Brave', 'Spotify', 'Word', 'Excel'). "
-                            "JARVIS will dynamically search the Windows Start Menu to find it."
+                            "ZYTRIX will dynamically search the Windows Start Menu to find it."
                         ),
                     }
                 },
@@ -927,7 +928,7 @@ def execute_tool(tool_name: str, tool_args: dict) -> tuple[str, str]:
 
     # ── send_notification ─────────────────────────────────────────────────────
     elif tool_name == "send_notification":
-        title = tool_args.get("title", "JARVIS")
+        title = tool_args.get("title", "ZYTRIX")
         message = tool_args.get("message", "")
         if send_notification(title, message):
             return "Notification sent.", "Notification sent."
@@ -1041,15 +1042,15 @@ def parse_raw_args(leftover: str, tool_name: str) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# THE JARVIS AGENT
+# THE ZYTRIX AGENT
 # ─────────────────────────────────────────────────────────────────────────────
 
-class JarvisAgent:
+class ZytrixAgent:
     def __init__(self):
         self.client = Groq(api_key=GROQ_API_KEY)
         self.model = LLM_MODEL
         system_instructions = (
-            "You are JARVIS, an advanced AI assistant running directly on the user's Windows PC. "
+            "You are ZYTRIX, an advanced AI assistant running directly on the user's Windows PC. "
             f"The current user is '{os.getlogin()}'. Their home directory is '{os.path.expanduser('~')}'. "
             "When creating files or folders on the Desktop, always use the path: "
             f"'{os.path.join(os.path.expanduser('~'), 'Desktop')}'. "
@@ -1062,6 +1063,15 @@ class JarvisAgent:
             "Use plain English only."
         )
         self.memory = ConversationalMemory(system_prompt=system_instructions)
+
+        # ── Persistent Memory System ───────────────────────────────────────────
+        # MemoryManager is the ONLY entry point to the memory subsystem.
+        # It handles classification, storage, retrieval, and summarization.
+        # The NLP agent never touches SQLite or any sub-module directly.
+        # WHY HERE? Created alongside ConversationalMemory so both memory
+        # systems are initialized at agent startup — before any user input.
+        self.long_term_memory = MemoryManager()
+
         logger.info("Groq Agent with Tool Calling Online.")
 
     def _reset_memory(self):
@@ -1069,6 +1079,17 @@ class JarvisAgent:
         system_msg = self.memory.history[0]
         self.memory.history = [system_msg]
         logger.warning("Conversation memory fully reset to recover from API error.")
+
+    def shutdown(self):
+        """
+        Gracefully shuts down the agent, summarizing and persisting session data.
+
+        Call this when the application exits (via signal handler or atexit).
+        Ensures the current session is summarized and stored before the
+        SQLite connection is closed.
+        """
+        logger.info("Shutting down ZytrixAgent. Saving session...")
+        self.long_term_memory.shutdown()
 
     def _inject_format_hint(self):
         """Inserts the tool format hint after the system prompt to guide the model on retry."""
@@ -1093,7 +1114,46 @@ class JarvisAgent:
         # 1. Check Fast-Track Intent Layer (Milliseconds response)
         fast_response = self._fast_track_intent(user_text)
         if fast_response:
+            # Fast-track bypasses LLM — still log user message for history.
+            # We do NOT store the fast-track reply in long_term_memory because
+            # hardware commands ("set volume 50") are not worth memorizing.
+            self.long_term_memory.process_message("user", user_text)
+            self.long_term_memory.process_message("assistant", fast_response)
             return fast_response
+
+        # ── Long-Term Memory: Store this user message ──────────────────────────
+        # process_message does TWO things simultaneously:
+        #   (a) Saves the raw message to conversation history (for summarization)
+        #   (b) Runs the classifier — stores as long-term memory IF meaningful
+        # This is called BEFORE add_user_message because the memory decision
+        # should be independent of the LLM context window state.
+        self.long_term_memory.process_message("user", user_text)
+
+        # ── Memory Context Injection ───────────────────────────────────────────
+        # Retrieve the top-N most relevant memories for this specific query.
+        # These are injected into the SYSTEM PROMPT (not conversation history)
+        # so ZYTRIX knows persistent user facts without re-stating them each turn.
+        #
+        # WHY SYSTEM PROMPT AND NOT CONVERSATION HISTORY?
+        #   Injecting into history would falsely imply ZYTRIX "said" these facts
+        #   in a previous turn. System prompt is the correct place for
+        #   "global context about the user" that shapes ALL responses.
+        #
+        # WHY NOT DUMP THE ENTIRE DATABASE?
+        #   Context windows are finite and expensive. We retrieve ONLY the
+        #   memories relevant to this specific query — typically 3-7 items.
+        memory_context = self.long_term_memory.build_context(user_text)
+        if memory_context:
+            # Temporarily update the system prompt with fresh memory context.
+            # We modify the FIRST message (system prompt) in the history.
+            # This is non-destructive — the base system_instructions remain;
+            # we just append the memory block for this call.
+            original_system = self.memory.history[0]["content"]
+            self.memory.history[0]["content"] = (
+                original_system
+                + "\n\n"
+                + memory_context
+            )
 
         # 2. Proceed to LLM for complex queries
         self.memory.add_user_message(user_text)
@@ -1255,13 +1315,28 @@ class JarvisAgent:
 
                 # Success — clean up any hints and save to memory
                 self._remove_format_hint()
+
+                # ── Restore system prompt (remove injected memory block) ────────
+                # We restore the original system prompt after the LLM call so that
+                # the memory block doesn't accumulate across turns (it's re-built
+                # fresh from the database before each call, ensuring it reflects
+                # any newly stored memories from this very turn).
+                if memory_context:
+                    self.memory.history[0]["content"] = original_system
+
                 self.memory.add_assistant_message(final_reply)
+
+                # ── Store assistant reply in conversation history ───────────────
+                # (Not classified for long-term memory — assistant replies are
+                #  ZYTRIX's responses, not the user's self-description.)
+                self.long_term_memory.process_message("assistant", final_reply)
+
                 return final_reply
 
             except Exception as e:
                 error_str = str(e)
 
-                # ── Groq model decommissioned ──────────────────────────────────
+                # ── Groq model decommissioned ──────────────────────────────
                 if "model_decommissioned" in error_str.lower():
                     logger.error(f"Model decommissioned: {error_str}")
                     self._reset_memory()
@@ -1306,13 +1381,42 @@ class JarvisAgent:
                         "Please check your GROQ_API_KEY in the dot env file."
                     )
 
-                # ── Rate limit ─────────────────────────────────────────────────
+                # ── Rate limit (429) ───────────────────────────────────────────
                 elif "429" in error_str or "rate_limit" in error_str.lower():
-                    logger.warning(f"Rate limited by Groq: {error_str}")
-                    wait_time = 5 * (attempt + 1)
-                    logger.info(f"Waiting {wait_time}s before retry...")
-                    time.sleep(wait_time)
-                    continue
+                    logger.warning(f"Rate limited by Groq on attempt {attempt + 1}: {error_str}")
+
+                    if attempt < max_retries - 1:
+                        # Exponential backoff: 2s → 4s → 8s, capped at 30s
+                        backoff = min(2 ** (attempt + 1), 30)
+
+                        # Respect Groq's Retry-After header when present in the error string
+                        # e.g. "retry after 59.8s" or "retry_after: 60"
+                        retry_after_match = re.search(
+                            r'(?:retry.after[:\s]+)(\d+(?:\.\d+)?)',
+                            error_str,
+                            re.IGNORECASE
+                        )
+                        if retry_after_match:
+                            backoff = min(float(retry_after_match.group(1)) + 1, 60)
+                            logger.info(f"Groq Retry-After detected: waiting {backoff:.1f}s.")
+
+                        logger.info(f"Rate limit backoff: waiting {backoff:.1f}s before retry {attempt + 2}/{max_retries}.")
+
+                        # Notify the user on the first hit so ZYTRIX doesn't appear frozen
+                        if attempt == 0:
+                            from backend.voice import tts as _tts
+                            _tts.speak("I am at my request limit. Give me just a moment.")
+
+                        time.sleep(backoff)
+                        continue
+                    else:
+                        # All retries exhausted — tell the user explicitly
+                        logger.error("Rate limit persists after all retries. Giving up.")
+                        return (
+                            "I have hit my API rate limit and could not recover in time. "
+                            "Please wait a moment and try again."
+                        )
+
 
                 # ── Unknown error ──────────────────────────────────────────────
                 else:
@@ -1394,5 +1498,66 @@ class JarvisAgent:
                         pyautogui.hotkey('alt', 'f4')
                         return "Closing the terminal window."
             return "I couldn't find an active terminal window to close."
+
+        # ── PLAY MUSIC ──────────────────────────────────────────────────────
+        # Catches natural phrases: "play Hips Don't Lie", "put on some Drake",
+        # "play Blinding Lights on Spotify", "play something by Shakira", etc.
+        # Routes to Spotify (app) or YouTube (browser) depending on phrasing.
+        # This is a fast-track bypass — no LLM round-trip needed.
+        play_match = re.search(
+            r'^(?:play|put on|start playing|queue|i want to listen to)\s+(.+)$',
+            t,
+            re.IGNORECASE
+        )
+        if play_match:
+            query_raw = play_match.group(1).strip()
+
+            # ── Spotify variant: "play X on Spotify" ──────────────────────────
+            spotify_match = re.search(
+                r'^(.+?)\s+on\s+spotify$',
+                query_raw,
+                re.IGNORECASE
+            )
+            if spotify_match:
+                song_query = spotify_match.group(1).strip()
+                try:
+                    # Launch Spotify (or bring it to front if already open)
+                    launch_app("spotify")
+                    time.sleep(2.5)  # Let Spotify finish loading/focusing
+                    # Spotify search shortcut: Ctrl+L opens the search bar
+                    import pyautogui as _pag
+                    _pag.hotkey('ctrl', 'l')
+                    time.sleep(0.3)
+                    _pag.write(song_query, interval=0.05)
+                    _pag.press('enter')
+                    logger.info(f"Music: Searching Spotify for '{song_query}'.")
+                    return f"Playing {song_query} on Spotify."
+                except Exception as e:
+                    logger.warning(f"Spotify play failed: {e}. Falling back to YouTube.")
+                    # Fall through to YouTube below
+
+            # ── YouTube variant (default): "play X" ───────────────────────────
+            # Strip filler words Whisper often adds before the song name
+            clean_query = re.sub(
+                r'^(?:some(?:thing)?\s+by\s+|some\s+|a\s+song\s+by\s+|music\s+by\s+)',
+                '',
+                query_raw,
+                flags=re.IGNORECASE
+            ).strip()
+
+            # Strip trailing platform/filler Whisper hallucinates after song names:
+            # "on Spotify", "on YouTube", "on Apple Music", "for me", "please", etc.
+            clean_query = re.sub(
+                r'\s+(?:on\s+(?:spotify|youtube|youtube\s+music|apple\s+music)|for\s+me|please|now|right\s+now)$',
+                '',
+                clean_query,
+                flags=re.IGNORECASE
+            ).strip()
+
+            if clean_query:
+                from backend.commands.browser import play_on_youtube
+                play_on_youtube(clean_query)
+                logger.info(f"Music: Playing '{clean_query}' on YouTube.")
+                return f"Playing {clean_query} on YouTube."
 
         return None
