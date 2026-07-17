@@ -130,14 +130,14 @@ def play_audio_windows_threaded(file_path: str, token: str, session_id: str, sta
     except Exception as e:
         log_event("TTS", f"Failed to remove temp audio file {file_path}: {e}", level=30)
 
-def speak(text: str, voice: str = TTS_VOICE, session_id: str = None, state_tracker = None, assistant_speaking_event = None, tts_stop_event = None, post_tts_callback = None):
+def speak(text: str, voice: str = TTS_VOICE, rate: str = "+0%", session_id: str = None, state_tracker = None, assistant_speaking_event = None, tts_stop_event = None, post_tts_callback = None):
     """
     Converts text to speech and schedules playback in a non-blocking background thread.
     Can be called synchronously (fallback) if duplex arguments are omitted.
     """
     # 1. Synthesize edge-tts asynchronously
     async def _synthesize(temp_name):
-        communicate = edge_tts.Communicate(text, voice)
+        communicate = edge_tts.Communicate(text, voice, rate=rate)
         await communicate.save(temp_name)
 
     # Generate a temporary file to store audio

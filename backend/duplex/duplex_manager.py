@@ -31,6 +31,7 @@ from config import WAKE_WORD_NAME, DEMO_MODE, TTS_VOICE
 from backend.wake_word.detector import WakeWordDetector
 from backend.voice.stt import SpeechToText
 from backend.nlp.agent import ZytrixAgent
+from backend.emotion.emotion_manager import EmotionManager
 from backend.voice import tts
 from backend.duplex.constants import (
     SAMPLE_RATE,
@@ -76,10 +77,11 @@ class DuplexManager:
         self.audio_bus = AudioBus()
         self.interrupt_detector = InterruptionDetector()
         
-        # Core Models (VAD, STT, Agent)
+        # Core Models (VAD, STT, Agent, Emotion)
         self.ww_detector = WakeWordDetector(WAKE_WORD_NAME)
         self.stt = SpeechToText()
-        self.agent = ZytrixAgent()
+        self.emotion_manager = EmotionManager()
+        self.agent = ZytrixAgent(emotion_manager=self.emotion_manager)
         
         # Demo mode tracking
         self.demo_mode = DEMO_MODE
@@ -538,6 +540,9 @@ class DuplexManager:
                     tts.speak("Demo mode deactivated.")
                 return
 
+            # Step 1.5: Analyze Emotion / Conversational State
+            self.emotion_manager.analyze_audio(audio_data)
+
             # Step 2: Route through NLP Agent Brain
             log_event("PIPELINE", "Routing command to Groq Agent...")
             reply = self.agent.think(command_text)
@@ -548,12 +553,17 @@ class DuplexManager:
                 return
 
             # Step 3: Speak Response (Non-blocking)
+            # Fetch subtle TTS adaptations based on conversational state
+            tts_tweaks = self.emotion_manager.get_tts_adaptation()
+            tts_rate = tts_tweaks.get("rate", "+0%")
+
             # post_tts_callback suppresses wake word re-triggers from TTS echo:
             # the speaker output lingers in the room for ~1.5s after playback ends
             # and would otherwise immediately fire a false wake word detection.
             tts.speak(
                 text=reply,
                 voice=TTS_VOICE,
+                rate=tts_rate,
                 session_id=session_id,
                 state_tracker=self.state_tracker,
                 assistant_speaking_event=self.assistant_speaking_event,

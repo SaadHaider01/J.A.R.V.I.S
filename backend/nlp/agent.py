@@ -1046,9 +1046,10 @@ def parse_raw_args(leftover: str, tool_name: str) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class ZytrixAgent:
-    def __init__(self):
+    def __init__(self, emotion_manager=None):
         self.client = Groq(api_key=GROQ_API_KEY)
         self.model = LLM_MODEL
+        self.emotion_manager = emotion_manager
         system_instructions = (
             "You are ZYTRIX, an advanced AI assistant running directly on the user's Windows PC. "
             f"The current user is '{os.getlogin()}'. Their home directory is '{os.path.expanduser('~')}'. "
@@ -1129,7 +1130,7 @@ class ZytrixAgent:
         # should be independent of the LLM context window state.
         self.long_term_memory.process_message("user", user_text)
 
-        # ── Memory Context Injection ───────────────────────────────────────────
+        # ── Memory & Emotion Context Injection ────────────────────────────────
         # Retrieve the top-N most relevant memories for this specific query.
         # These are injected into the SYSTEM PROMPT (not conversation history)
         # so ZYTRIX knows persistent user facts without re-stating them each turn.
@@ -1143,16 +1144,21 @@ class ZytrixAgent:
         #   Context windows are finite and expensive. We retrieve ONLY the
         #   memories relevant to this specific query — typically 3-7 items.
         memory_context = self.long_term_memory.build_context(user_text)
-        if memory_context:
+        emotion_context = ""
+        if self.emotion_manager:
+            emotion_context = self.emotion_manager.get_prompt_injection()
+            
+        if memory_context or emotion_context:
             # Temporarily update the system prompt with fresh memory context.
             # We modify the FIRST message (system prompt) in the history.
             # This is non-destructive — the base system_instructions remain;
             # we just append the memory block for this call.
             original_system = self.memory.history[0]["content"]
+            combined_context = f"{memory_context}\n\n{emotion_context}".strip()
             self.memory.history[0]["content"] = (
                 original_system
                 + "\n\n"
-                + memory_context
+                + combined_context
             )
 
         # 2. Proceed to LLM for complex queries
@@ -1321,7 +1327,7 @@ class ZytrixAgent:
                 # the memory block doesn't accumulate across turns (it's re-built
                 # fresh from the database before each call, ensuring it reflects
                 # any newly stored memories from this very turn).
-                if memory_context:
+                if memory_context or emotion_context:
                     self.memory.history[0]["content"] = original_system
 
                 self.memory.add_assistant_message(final_reply)
