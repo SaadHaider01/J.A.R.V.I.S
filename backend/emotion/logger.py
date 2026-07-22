@@ -29,5 +29,5 @@ def log_emotion(event: str, message: str, level: int = logging.INFO):
     
     Format: [EMOTION:EVENT] Message
     """
-    formatted_msg = f"[EMOTION:{event.upper()}] {message}"
+    formatted_msg = f"\033[1;35m[EMOTION:{event.upper()}]\033[0m \033[36m{message}\033[0m"
     emotion_logger.log(level, formatted_msg)

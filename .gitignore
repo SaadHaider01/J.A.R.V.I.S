@@ -68,3 +68,6 @@ backend/wake_word/detector.py
 models/hey_jarvis.tflite
 completed_features.md
 Phase1_Technical_Guide.md
+Zytrix_Backend_Files_Guide.md
+data/zytrix_memory.db-shm
+data/zytrix_memory.db-wal

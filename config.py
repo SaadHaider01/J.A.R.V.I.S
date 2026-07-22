@@ -1,15 +1,23 @@
-from decouple import config
+from decouple import RepositoryEnv
 import os
 from pathlib import Path
 
 # Base paths
 BASE_DIR = Path(__file__).resolve().parent
 
-# API Keys loaded from .env
-OPENWEATHERMAP_API_KEY = config('OPENWEATHERMAP_API_KEY', default='')
-NEWS_API_KEY = config('NEWS_API_KEY', default='')
+# Load API Keys EXCLUSIVELY from .env file (bypasses OS environment variables
+# which can override .env and cause stale/incorrect API keys to be used).
+_env_file = RepositoryEnv(BASE_DIR / '.env')
+def _get(key, default=''):
+    try:
+        return _env_file[key]
+    except Exception:
+        return default
 
-GROQ_API_KEY = config('GROQ_API_KEY', default='')
+OPENWEATHERMAP_API_KEY = _get('OPENWEATHERMAP_API_KEY')
+NEWS_API_KEY = _get('NEWS_API_KEY')
+
+GROQ_API_KEY = _get('GROQ_API_KEY')
 
 # AI Model Defaults
 WHISPER_MODEL_SIZE = "small.en" # Better accuracy than base.en, still fast enough for real-time use
