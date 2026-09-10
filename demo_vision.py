@@ -55,8 +55,52 @@ async def main():
     t0 = time.monotonic()
     
     # Run the pipeline
+    query_text = """
+You are Zytrix, an AI assistant with screen-understanding capabilities.
+
+Your task is to analyze OCR text extracted from a screenshot and generate a concise perception report.
+
+Instructions:
+
+- Identify the application visible on the screen.
+- Determine the content type (Document, Code, Error, Browser, Chat, Table, PDF, etc.).
+- Focus on the main content, not the user interface.
+- Ignore toolbar items, menu options, status bars, and controls such as:
+
+  Home, Insert, Review, Mailings, Comments, Search, Copy, Paste, Share, AutoSave, Font, Paragraph, Styles.
+
+- Extract the important information from the document.
+- Summarize only what is explicitly visible.
+- Do not hallucinate information.
+- If the application cannot be determined, return "UNKNOWN".
+- If the content type cannot be determined, return "UNKNOWN".
+
+Return the answer in exactly this format:
+
+Application: <application>
+
+Content Type: <content type>
+
+Summary:
+
+<2–4 sentence summary>
+
+Important points:
+
+- Point 1
+- Point 2
+- Point 3
+
+Current limitations:
+
+- Limitation 1
+
+OCR TEXT:
+
+{ocr_text}
+"""
     try:
-        result = await manager.analyze_screen(query="Analyze the contents of this window.")
+        result = await manager.analyze_screen(query=query_text)
     except Exception as e:
         print(f"\n{YELLOW}⚠️  Error running vision pipeline: {e}{RESET}")
         print("Note: If you see 'BitBlt: Access is denied', you must run this script from an interactive desktop terminal, not a background SSH session.")
@@ -77,6 +121,42 @@ async def main():
 
     ctx = result.screen_context
     
+    # --- GROQ FALLBACK ---
+    if result.backend_used == "ocr_only" and ctx.summary:
+        print(f"\n{YELLOW}Notice: Vision models offline. Using Groq LLM as a fallback summarizer...{RESET}")
+        try:
+            from groq import Groq
+            import sys
+            import os
+            sys.path.append(os.path.dirname(__file__))
+            from config import GROQ_API_KEY, LLM_MODEL
+            
+            client = Groq(api_key=GROQ_API_KEY)
+            prompt = query_text.replace("{ocr_text}", ctx.summary)
+            
+            response = client.chat.completions.create(
+                model=LLM_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3
+            )
+            ctx.summary = response.choices[0].message.content
+        except Exception as e:
+            print(f"{YELLOW}Groq fallback failed: {e}{RESET}")
+    # ---------------------
+
+    import json
+
+    print(f"{BOLD}RAW CONTEXT OBJECT{RESET}")
+
+    print(
+        json.dumps(
+            ctx.to_prompt_dict(),
+            indent=2
+        )
+    )
+
+    print()
+
     # Display the structured context Zytrix built
     print(f"{BOLD}1. CLASSIFICATION{RESET}")
     print(f"  Application:   {GREEN}{ctx.application.name}{RESET} (Confidence: {ctx.confidence.application:.2f})")

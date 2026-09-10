@@ -521,7 +521,6 @@ _ACTION_ONLY_TOOLS = {
     "close_app_window",
     "minimize_app_window",
     "switch_active_window",
-    "get_open_windows",
     # ── New Total Control tools ──
     "create_file",
     "create_directory",

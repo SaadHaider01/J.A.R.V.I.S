@@ -457,10 +457,13 @@ def _run_easyocr(image: Image.Image, mode: OCRMode) -> OCRResult:
     t0 = time.monotonic()
     reader = _get_easyocr_reader()
     processed = _preprocess(image, mode)
+    
+    import numpy as np
+    img_np = np.array(processed)
 
     # detail=1 returns bounding boxes and confidence. paragraph=False gives
     # word-level results, which produces finer-grained TextBlocks.
-    raw_results = reader.readtext(processed, detail=1, paragraph=False)
+    raw_results = reader.readtext(img_np, detail=1, paragraph=False)
 
     ms = (time.monotonic() - t0) * 1000
     blocks: list[TextBlock] = []
