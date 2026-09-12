@@ -1347,7 +1347,7 @@ class ZytrixAgent:
                     self._reset_memory()
                     return (
                         "My language model has been retired by Groq. "
-                        "Please update LLM_MODEL in config.py to llama-3.3-70b-versatile."
+                        "Please update LLM_MODEL in config.py to openai/gpt-oss-120b."
                     )
 
                 # ── Tool call formatting bug (400 / tool_use_failed) ───────────

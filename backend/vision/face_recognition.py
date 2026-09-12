@@ -157,7 +157,7 @@ class FaceRecognizer:
                 ), []
                 
             if presence_result.face_count > 1:
-                log.info("multiple_faces_detected", count=presence_result.face_count)
+                log.debug("multiple_faces_detected", count=presence_result.face_count)
                 return RecognitionResult(
                     state=RecognitionState.MULTIPLE_FACES,
                     recognized=False,
@@ -197,9 +197,9 @@ class FaceRecognizer:
             else:
                 state = RecognitionState.UNKNOWN_USER
                 recognized = False
-                log.info("unknown_face", distance=distance, threshold=self.threshold)
+                log.debug("unknown_face", distance=distance, threshold=self.threshold)
                 
-            log.info("face_recognition_result", state=state.value, distance=distance)
+            log.debug("face_recognition_result", state=state.value, distance=distance)
 
             return RecognitionResult(
                 state=state,

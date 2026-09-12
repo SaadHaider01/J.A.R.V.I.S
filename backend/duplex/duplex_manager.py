@@ -105,6 +105,18 @@ class DuplexManager:
         # Thread containers
         self.mic_stream = None
         self.manager_thread = None
+        
+        # External Activation Bridge
+        self._external_activation_event = threading.Event()
+        self._activation_source = ""
+
+    def request_activation(self, source: str = "external"):
+        """
+        Thread-safe method to request a conversation session from an external trigger.
+        Will only be consumed if the system is currently in a state that permits it.
+        """
+        self._activation_source = source
+        self._external_activation_event.set()
 
     def start(self):
         """Starts the duplex processing loop and resources."""
@@ -237,17 +249,38 @@ class DuplexManager:
                     flat_int16 = (to_process * 32767).astype(np.int16)
                     
                     # Feed wake word detector
-                    if self.ww_detector.process_audio(flat_int16):
-                        # Retrigger guard check for demo mode
-                        if self.demo_mode and (time.time() - self._demo_last_run) < DEMO_RETRIGGER_GUARD_S:
-                            log_event("DEMO", "Re-trigger suppressed by demo guard timer.")
-                            ww_accumulator = []
-                            continue
+                    ww_detected = self.ww_detector.process_audio(flat_int16)
+                    external_activation = self._external_activation_event.is_set()
+                    
+                    if ww_detected or external_activation:
+                        if external_activation:
+                            # Clear the event so it doesn't fire again
+                            self._external_activation_event.clear()
+                            activation_src = self._activation_source
+                            log_event("ACTIVATION", f"Activation requested via external trigger: {activation_src}")
+                            # Vision activation is acoustically silent; no echo to mask.
+                            self.cooldown_until = 0.0
+                        else:
+                            activation_src = "wake_word"
+                            # Retrigger guard check for demo mode (only applies to wake word)
+                            if self.demo_mode and (time.time() - self._demo_last_run) < DEMO_RETRIGGER_GUARD_S:
+                                log_event("DEMO", "Re-trigger suppressed by demo guard timer.")
+                                ww_accumulator = []
+                                continue
+                            log_event("WAKEWORD", "Wake word detected!")
+                            # ── VAD Echo Cooldown after Wake Word ─────────────────────────────
+                            # PROBLEM: After the wake word fires, the speaker produces TTS audio
+                            # (e.g. a confirmation beep or previous TTS echo) and that energy
+                            # leaks into the microphone. Without a brief cooldown, the first few
+                            # high-energy chunks in the LISTENING state immediately set
+                            # `speech_detected = True`, causing the system to think the user is
+                            # speaking even before they've said anything.
+                            # SOLUTION: Discard VAD input for a short window (0.5s = 16 chunks)
+                            # right after wake word triggers, letting the speaker output settle.
+                            self.cooldown_until = time.time() + 0.5
                             
-                        log_event("WAKEWORD", "Wake word detected!")
-                        
-                        # Demo Mode sequence bypass
-                        if self.demo_mode:
+                        # Demo Mode sequence bypass (only if activated by wake word)
+                        if self.demo_mode and activation_src == "wake_word":
                             _run_demo_sequence()
                             self._demo_last_run = time.time()
                             self.audio_bus.clear()
@@ -258,17 +291,6 @@ class DuplexManager:
                         # Standard Conversation Initiation
                         self.state_tracker.increment_session()
                         self.state_tracker.transition_to(AssistantState.LISTENING)
-                        
-                        # ── VAD Echo Cooldown after Wake Word ─────────────────────────────
-                        # PROBLEM: After the wake word fires, the speaker produces TTS audio
-                        # (e.g. a confirmation beep or previous TTS echo) and that energy
-                        # leaks into the microphone. Without a brief cooldown, the first few
-                        # high-energy chunks in the LISTENING state immediately set
-                        # `speech_detected = True`, causing the system to think the user is
-                        # speaking even before they've said anything.
-                        # SOLUTION: Discard VAD input for a short window (0.5s = 16 chunks)
-                        # right after wake word triggers, letting the speaker output settle.
-                        self.cooldown_until = time.time() + 0.5
                         
                         # Reset VAD parameters
                         listening_buffer = []

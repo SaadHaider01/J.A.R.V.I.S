@@ -28,6 +28,8 @@ from backend.duplex.duplex_manager import DuplexManager
 from backend.duplex.metrics import metrics_tracker
 from backend.duplex.logger import log_event
 
+from backend.vision.vision_service import VisionService
+
 # Configure root system logger
 logging.basicConfig(
     level=logging.DEBUG if DEBUG else logging.INFO,
@@ -41,6 +43,11 @@ def main():
     # Initialize the master duplex coordinator
     try:
         zytrix = DuplexManager()
+        
+        # Initialize Vision Service and hook its activation event to DuplexManager
+        vision = VisionService(
+            on_activation=lambda event: zytrix.request_activation(source="vision_presence")
+        )
     except Exception as e:
         logger.critical(f"Failed to boot ZYTRIX models: {e}")
         sys.exit(1)
@@ -50,6 +57,7 @@ def main():
     # Start the continuous stream duplex workers
     try:
         zytrix.start()
+        vision.start()
         
         # Keep the main thread alive while workers process audio in background
         while not zytrix.shutdown_event.is_set():
@@ -61,6 +69,7 @@ def main():
         logger.error(f"Critical Runtime Exception: {e}")
     finally:
         # Guarantee safe cleanup of mic streams, threads, and files
+        vision.stop()
         zytrix.stop()
         
         # Print performance diagnostics metrics before exiting

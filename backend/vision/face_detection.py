@@ -107,7 +107,7 @@ class FaceDetector:
             
             # Logging metadata only
             if face_count > 0:
-                log.info("Face detected", face_count=face_count, processing_ms=processing_time_ms)
+                log.debug("Face detected", face_count=face_count, processing_ms=processing_time_ms)
             
             result = PresenceResult(
                 face_detected=(face_count > 0),

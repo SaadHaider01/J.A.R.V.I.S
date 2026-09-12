@@ -98,7 +98,7 @@ def get_vision_logger(name: str) -> logging.Logger:
     root = logging.getLogger("zytrix.vision")
     if not root.handlers:
         handler = logging.StreamHandler()
-        handler.setLevel(logging.DEBUG)
+        handler.setLevel(logging.INFO)
 
         # Structured-ish format: timestamp | level | logger | message
         formatter = logging.Formatter(
@@ -109,7 +109,7 @@ def get_vision_logger(name: str) -> logging.Logger:
         handler.addFilter(_SecretRedactionFilter())
 
         root.addHandler(handler)
-        root.setLevel(logging.DEBUG)
+        root.setLevel(logging.INFO)
         root.propagate = False  # Don't double-log to the root Python logger.
 
     return logger

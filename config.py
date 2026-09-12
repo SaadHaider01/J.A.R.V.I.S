@@ -24,7 +24,7 @@ WHISPER_MODEL_SIZE = "small.en" # Better accuracy than base.en, still fast enoug
 TTS_VOICE = "en-GB-RyanNeural" # Highly realistic British Male AI Voice
 
 # Agent Settings
-LLM_MODEL = "llama-3.3-70b-versatile" # Much smarter model, higher accuracy for one-shot tool calling
+LLM_MODEL = "openai/gpt-oss-120b" # Stable model that exists in Groq
 
 WAKE_WORD_NAME = os.path.join(BASE_DIR, "models", "zye_triks.onnx")
 
