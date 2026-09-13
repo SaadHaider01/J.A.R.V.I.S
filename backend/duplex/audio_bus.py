@@ -38,7 +38,8 @@ from backend.duplex.constants import (
 class AudioBus:
     def __init__(self):
         # We specify a fixed maxsize for queue overflow prevention
-        self.queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
+        self.queue = queue.Queue(maxsize=QUEUE_MAXSIZE)  # Legacy/Duplex queue
+        self.ambient_queue = queue.Queue(maxsize=QUEUE_MAXSIZE)  # Independent ambient fan-out queue
         
         # Ring buffer for pre-speech frames, protected by size constraints.
         # It automatically drops the oldest items when the maxlen is exceeded.
@@ -57,13 +58,14 @@ class AudioBus:
         size = self.queue.qsize()
         metrics_tracker.update_queue_pressure(size, QUEUE_MAXSIZE)
         
+        # 1. FAN-OUT TO DUPLEX QUEUE
         try:
             # Attempt to insert frame without blocking
             self.queue.put_nowait((timestamp, chunk))
         except queue.Full:
             # Queue saturated! Drop oldest chunk to make room
             try:
-                dropped_item = self.queue.get_nowait()
+                self.queue.get_nowait()
                 metrics_tracker.record_dropped_chunk()
             except queue.Empty:
                 pass
@@ -74,19 +76,45 @@ class AudioBus:
             except queue.Full:
                 log_event("QUEUE", "Failed to insert chunk even after dropping old frame!", level=40) # ERROR
 
+        # 2. FAN-OUT TO AMBIENT QUEUE
+        try:
+            self.ambient_queue.put_nowait((timestamp, chunk))
+        except queue.Full:
+            # Drop oldest ambient chunk to make room (never blocks producer)
+            try:
+                self.ambient_queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                self.ambient_queue.put_nowait((timestamp, chunk))
+            except queue.Full:
+                pass
+
     def get_chunk(self, timeout: float = 0.1) -> tuple[float, np.ndarray]:
         """
-        Retrieves a chunk from the queue. Blocks up to `timeout` seconds.
+        Retrieves a chunk from the Duplex queue. Blocks up to `timeout` seconds.
         Raises queue.Empty if timeout expires.
         """
         return self.queue.get(block=True, timeout=timeout)
+        
+    def get_ambient_chunk(self, timeout: float = 0.1) -> tuple[float, np.ndarray]:
+        """
+        Retrieves a chunk from the independent Ambient queue.
+        Raises queue.Empty if timeout expires.
+        """
+        return self.ambient_queue.get(block=True, timeout=timeout)
 
     def clear(self):
-        """Discards all accumulated chunks currently sitting in the queue."""
-        log_event("QUEUE", "Clearing audio queue (flushing stale frames).")
+        """Discards all accumulated chunks currently sitting in the queues."""
+        log_event("QUEUE", "Clearing audio queues (flushing stale frames).")
         while not self.queue.empty():
             try:
                 self.queue.get_nowait()
+            except queue.Empty:
+                break
+        while not self.ambient_queue.empty():
+            try:
+                self.ambient_queue.get_nowait()
             except queue.Empty:
                 break
 

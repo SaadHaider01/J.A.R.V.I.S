@@ -29,6 +29,7 @@ from backend.duplex.metrics import metrics_tracker
 from backend.duplex.logger import log_event
 
 from backend.vision.vision_service import VisionService
+from backend.audio.ambient_awareness import AmbientAwarenessService
 
 # Configure root system logger
 logging.basicConfig(
@@ -48,6 +49,10 @@ def main():
         vision = VisionService(
             on_activation=lambda event: zytrix.request_activation(source="vision_presence")
         )
+        
+        # Initialize Ambient Awareness Service with the duplex's audio bus
+        ambient = AmbientAwarenessService(audio_bus=zytrix.audio_bus)
+        
     except Exception as e:
         logger.critical(f"Failed to boot ZYTRIX models: {e}")
         sys.exit(1)
@@ -58,6 +63,7 @@ def main():
     try:
         zytrix.start()
         vision.start()
+        ambient.start()
         
         # Keep the main thread alive while workers process audio in background
         while not zytrix.shutdown_event.is_set():
@@ -69,6 +75,7 @@ def main():
         logger.error(f"Critical Runtime Exception: {e}")
     finally:
         # Guarantee safe cleanup of mic streams, threads, and files
+        ambient.stop()
         vision.stop()
         zytrix.stop()
         
